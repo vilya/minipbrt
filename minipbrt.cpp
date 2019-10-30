@@ -666,11 +666,11 @@ namespace minipbrt {
   //
 
   struct Attributes {
-    Material* activeMaterial = nullptr;
-    AreaLight* areaLight     = nullptr;
-    Medium* insideMedium     = nullptr;
-    Medium* outsideMedium    = nullptr;
-    bool reverseOrientation  = false;
+    uint32_t activeMaterial = kInvalidIndex;
+    uint32_t areaLight      = kInvalidIndex;
+    uint32_t insideMedium   = kInvalidIndex;
+    uint32_t outsideMedium  = kInvalidIndex;
+    bool reverseOrientation = false;
   };
 
 
@@ -2655,19 +2655,19 @@ namespace minipbrt {
     const char* inside = string_arg(0);
     const char* outside = string_arg(1);
 
-    Medium* insideMedium = nullptr;
+    uint32_t insideMedium = kInvalidIndex;
     if (m_inWorld && inside[0] != '\0') {
       insideMedium = find_medium(inside);
-      if (insideMedium == nullptr) {
+      if (insideMedium == kInvalidIndex) {
         m_tokenizer.set_error("Inside medium '%s' has not been defined yet", inside);
         return false;
       }
     }
 
-    Medium* outsideMedium = nullptr;
+    uint32_t outsideMedium = kInvalidIndex;
     if (outside[0] != '\0') {
       outsideMedium = find_medium(outside);
-      if (outsideMedium == nullptr) {
+      if (outsideMedium == kInvalidIndex) {
         m_tokenizer.set_error("Outside medium '%s' has not been defined yet", outside);
         return false;
       }
@@ -2984,7 +2984,15 @@ namespace minipbrt {
     }
 
     save_current_transform_matrices(&shape->shapeToWorld);
+    shape->object = m_activeObject;
+    shape->areaLight = m_attrs->top->areaLight;
+    shape->insideMedium = m_attrs->top->insideMedium;
+    shape->outsideMedium = m_attrs->top->outsideMedium;
+    shape->reverseOrientation = m_attrs->top->reverseOrientation;
 
+    if (m_activeObject != kInvalidIndex) {
+      m_tempShapes.push_back(static_cast<uint32_t>(m_scene->shapes.size()));
+    }
     m_scene->shapes.push_back(shape);
     return true;
   }
@@ -3010,7 +3018,7 @@ namespace minipbrt {
     // Params common to all area lights.
     spectrum_param_as_rgb("scale", areaLight->scale);
 
-    m_attrs->top->areaLight = areaLight;
+    m_attrs->top->areaLight = static_cast<uint32_t>(m_scene->areaLights.size());
     m_scene->areaLights.push_back(areaLight);
 
     return true;
@@ -3107,7 +3115,7 @@ namespace minipbrt {
   bool Parser::parse_Material()
   {
     MaterialType materialType = typed_enum_arg<MaterialType>(0);
-    Material* material = nullptr;
+    uint32_t material = kInvalidIndex;
     if (parse_material_common(materialType, nullptr, &material)) {
       m_attrs->top->activeMaterial = material;
       return true;
@@ -3125,16 +3133,16 @@ namespace minipbrt {
       return false;
     }
 
-    Material* material = nullptr;
+    uint32_t material = kInvalidIndex;
     if (parse_material_common(materialType, string_arg(0), &material)) {
-      material->name = copy_string(string_arg(0));
+      m_scene->materials[material]->name = copy_string(string_arg(0));
       return true;
     }
     return false;
   }
 
 
-  bool Parser::parse_material_common(MaterialType materialType, const char* materialName, Material** materialOut)
+  bool Parser::parse_material_common(MaterialType materialType, const char* materialName, uint32_t* materialOut)
   {
     Material* material = nullptr;
     switch (materialType) {
@@ -3265,10 +3273,10 @@ namespace minipbrt {
     }
 
     material->name = copy_string(materialName);
-    m_scene->materials.push_back(material);
     if (materialOut != nullptr) {
-      *materialOut = material;
+      *materialOut = static_cast<uint32_t>(m_scene->materials.size());
     }
+    m_scene->materials.push_back(material);
     return true;
   }
 
@@ -3276,27 +3284,55 @@ namespace minipbrt {
   bool Parser::parse_NamedMaterial()
   {
     const char* name = string_arg(0);
-    Material* mat = find_material(name);
+    uint32_t material = find_material(name);
 //    if (mat == nullptr) {
 //      m_tokenizer.set_error("Couldn't find any material named '%s'", name);
 //      return false;
 //    }
-    m_attrs->top->activeMaterial = mat;
+    m_attrs->top->activeMaterial = material;
     return true;
   }
 
 
   bool Parser::parse_ObjectBegin()
   {
-    const char* name = string_arg(0);
-    // TODO: add a new object to the scene and start adding things to it.
+    if (m_activeObject != kInvalidIndex) {
+      // TODO: Warn about unclosed object? Or should the definitions nest?
+      m_tokenizer.set_error("Previous ObjectBegin has not been closed yet");
+      return false;
+    }
+
+    m_tempShapes.clear();
+    m_tempInstances.clear();
+
+    Object* object = new Object();
+    save_current_transform_matrices(&object->objectToInstance);
+    object->name = copy_string(string_arg(0));
+    m_activeObject = static_cast<uint32_t>(m_scene->objects.size());
+    m_scene->objects.push_back(object);
     return true;
   }
 
 
   bool Parser::parse_ObjectEnd()
   {
-    // TODO: close the current object.
+    if (m_activeObject == kInvalidIndex) {
+      m_tokenizer.set_error("ObjectEnd without an ObjectBegin");
+      return false;
+    }
+
+    Object* object = m_scene->objects[m_activeObject];
+    object->numShapes = static_cast<uint32_t>(m_tempShapes.size());
+    object->shapes = new uint32_t[object->numShapes];
+    std::memcpy(object->shapes, m_tempShapes.data(), object->numShapes * sizeof(uint32_t));
+    m_tempShapes.clear();
+
+    object->numInstances = static_cast<uint32_t>(m_tempInstances.size());
+    object->instances = new uint32_t[object->numInstances];
+    std::memcpy(object->instances, m_tempInstances.data(), object->numInstances * sizeof(uint32_t));
+    m_tempInstances.clear();
+
+    m_activeObject = kInvalidIndex;
     return true;
   }
 
@@ -3304,7 +3340,27 @@ namespace minipbrt {
   bool Parser::parse_ObjectInstance()
   {
     const char* name = string_arg(0);
-    // TODO: create a new instance.
+
+    uint32_t object = find_object(name);
+    if (object == kInvalidIndex) {
+      m_tokenizer.set_error("Unknown object \"%s\"", name);
+      return false;
+    }
+
+    Instance* instance = new Instance();
+    save_current_transform_matrices(&instance->instanceToWorld);
+    instance->object = object;
+    instance->material = m_attrs->top->activeMaterial;
+    instance->areaLight = m_attrs->top->areaLight;
+    instance->insideMedium = m_attrs->top->insideMedium;
+    instance->outsideMedium = m_attrs->top->outsideMedium;
+    instance->reverseOrientation = m_attrs->top->reverseOrientation;
+
+    if (m_activeObject != kInvalidIndex) {
+//      m_activeObject->instances.push_back(instance);
+      m_tempInstances.push_back(static_cast<uint32_t>(m_scene->instances.size()));
+    }
+    m_scene->instances.push_back(instance);
     return true;
   }
 
@@ -3434,7 +3490,7 @@ namespace minipbrt {
 
   bool Parser::parse_TransformBegin()
   {
-    if (!m_attrs->push()) {
+    if (!m_transforms->push()) {
       m_tokenizer.set_error("Exceeded maximum attribute stack size");
       return false;
     }
@@ -3551,6 +3607,7 @@ namespace minipbrt {
       return false;
     }
 
+    save_current_transform_matrices(&camera->worldToCamera);
     float_param("shutteropen", &camera->shutteropen);
     float_param("shutterclose", &camera->shutterclose);
 
@@ -4371,15 +4428,15 @@ namespace minipbrt {
   }
 
 
-  bool Parser::texture_param(const char* name, Texture** dest)
+  bool Parser::texture_param(const char* name, uint32_t* dest)
   {
     char* textureName = nullptr;
     if (!string_param(name, &textureName)) {
       return false;
     }
 
-    Texture* tex = find_texture(textureName);
-    if (tex == nullptr) {
+    uint32_t tex = find_texture(textureName);
+    if (tex == kInvalidIndex) {
       return false;
     }
     *dest = tex;
@@ -4410,46 +4467,68 @@ namespace minipbrt {
   }
 
 
-  // FIXME: we may need to handle mediums being referenced before they're defined.
-  Medium* Parser::find_medium(const char *name)
+  uint32_t Parser::find_object(const char* name) const
   {
     if (name == nullptr || name[0] == '\0') {
-      return nullptr;
+      return kInvalidIndex;
     }
+    uint32_t i = 0;
+    for (Object* object : m_scene->objects) {
+      if (object->name != nullptr && std::strcmp(name, object->name) == 0) {
+        return i;
+      }
+      ++i;
+    }
+    return kInvalidIndex;
+  }
+
+
+  // FIXME: we may need to handle mediums being referenced before they're defined.
+  uint32_t Parser::find_medium(const char *name) const
+  {
+    if (name == nullptr || name[0] == '\0') {
+      return kInvalidIndex;
+    }
+    uint32_t i = 0;
     for (Medium* medium : m_scene->mediums) {
       if (medium->mediumName != nullptr && std::strcmp(name, medium->mediumName) == 0) {
-        return medium;
+        return i;
       }
+      ++i;
     }
-    return nullptr;
+    return kInvalidIndex;
   }
 
 
-  Material* Parser::find_material(const char* name)
+  uint32_t Parser::find_material(const char* name) const
   {
     if (name == nullptr || name[0] == '\0') {
-      return nullptr;
+      return kInvalidIndex;
     }
+    uint32_t i = 0;
     for (Material* material : m_scene->materials) {
       if (material->name != nullptr && std::strcmp(name, material->name) == 0) {
-        return material;
+        return i;
       }
+      ++i;
     }
-    return nullptr;
+    return kInvalidIndex;
   }
 
 
-  Texture* Parser::find_texture(const char* name)
+  uint32_t Parser::find_texture(const char* name) const
   {
     if (name == nullptr || name[0] == '\0') {
-      return nullptr;
+      return kInvalidIndex;
     }
+    uint32_t i = 0;
     for (Texture* texture : m_scene->textures) {
       if (texture->name != nullptr && std::strcmp(name, texture->name) == 0) {
-        return texture;
+        return i;
       }
+      ++i;
     }
-    return nullptr;
+    return kInvalidIndex;
   }
 
 

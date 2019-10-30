@@ -6,9 +6,9 @@ Must have (parser is not correct without them)
 
 Finish implementing:
 [ ] `parse_material_common()` - properties for each material type
-[ ] `parse_ObjectBegin()` - not implemented yet
-[ ] `parse_ObjectEnd()`	- not implemented yet
-[ ] `parse_ObjectInstance()` - not implemented yet
+[x] `parse_ObjectBegin()` - not implemented yet
+[x] `parse_ObjectEnd()`	- not implemented yet
+[x] `parse_ObjectInstance()` - not implemented yet
 [ ] `parse_Texture()` - properties for each texture type
 [ ] `blackbody_to_rgb()` - not implemented yet
 

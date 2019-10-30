@@ -63,19 +63,34 @@ Implementation notes
   size of the input buffer, although the default (1 MB) should be fine in all 
   but the most extreme cases.
 
+* Experimented with keeping transforms in a separate list and having other
+  objects refer to them by index. The theory was that this would save memory,
+  because some things could share the same transform. This turned out not to be
+  the case in practice: many files end up with a unique transform per object,
+  we end up paying the cost of a reference AND a transform per object.
+
+  * Future work in this area: if the file isn't animated, only store one 
+    matrix per object instead of two. Currently we always store two: one for 
+    the start time and one for  the end time, just in case the file is 
+    animated. But this can end up being a lot of wasted memory if the file 
+    isn't animated (roughly 2.4 GB for the Moana island, for example).
+
+  * Also, even when the file *is* animated, if both matrices are identical we 
+    only need to store one of them.
+    
 
 Performance
 -----------
 
 [Moana Island Scene](https://www.technology.disneyanimation.com/islandscene), island.pbrt:
-* Parsing time: 					127 secs
-* Peak memory use during parsing: 	?
-* Post-parsing memory use:			?
+* Parsing time:                   199 secs (3 mins, 19 secs)
+* Peak memory use during parsing: ?
+* Post-parsing memory use:        ?
 
 [Landscape Scene](https://www.pbrt.org/scenes-v3.html) from the PBRT v3 scene collection:
-* Parsing time:						< 1 second (note: not yet loading PLY meshes)
-* Peak memory use during parsing:	?
-* Post-parsing memory use:			?
+* Parsing time:                   < 1 second (note: not yet loading PLY meshes)
+* Peak memory use during parsing: ?
+* Post-parsing memory use:        ?
 
 Tested on a Windows 10 laptop with a Core i7 6700HQ CPU with 16 GB RAM and a
 Samsung NVMe SSD.

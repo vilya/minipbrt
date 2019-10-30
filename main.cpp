@@ -22,6 +22,8 @@ namespace minipbrt {
   static void print_integrator(const Integrator* integrator);
   static void print_sampler(const Sampler* sampler);
 
+  static void print_shapes_summary(const Scene* scene);
+
 
   //
   // Helper functions
@@ -77,15 +79,17 @@ namespace minipbrt {
       printf("Outside medium is \"%s\"\n", scene->outsideMedium->mediumName);
     }
 
-    printf("==== World ====\n");
-    printf("%u shapes\n",       uint32_t(scene->shapes.size()));
-    printf("%u objects\n",      uint32_t(scene->objects.size()));
-    printf("%u instances\n",    uint32_t(scene->instances.size()));
-    printf("%u lights\n",       uint32_t(scene->lights.size()));
-    printf("%u area lights\n",  uint32_t(scene->areaLights.size()));
-    printf("%u materials\n",    uint32_t(scene->materials.size()));
-    printf("%u textures\n",     uint32_t(scene->textures.size()));
-    printf("%u mediums\n",      uint32_t(scene->mediums.size()));
+    printf("==== World Summary ====\n");
+    printf("%10u shapes\n",       uint32_t(scene->shapes.size()));
+    printf("%10u objects\n",      uint32_t(scene->objects.size()));
+    printf("%10u instances\n",    uint32_t(scene->instances.size()));
+    printf("%10u lights\n",       uint32_t(scene->lights.size()));
+    printf("%10u area lights\n",  uint32_t(scene->areaLights.size()));
+    printf("%10u materials\n",    uint32_t(scene->materials.size()));
+    printf("%10u textures\n",     uint32_t(scene->textures.size()));
+    printf("%10u mediums\n",      uint32_t(scene->mediums.size()));
+
+    print_shapes_summary(scene);
   }
 
 
@@ -242,6 +246,27 @@ namespace minipbrt {
     printf("\n");
   }
 
+
+  static void print_shapes_summary(const Scene* scene)
+  {
+    constexpr uint32_t kNumShapeTypes = static_cast<uint32_t>(ShapeType::PLYMesh) + 1;
+
+    uint32_t numShapesByType[kNumShapeTypes];
+    for (uint32_t i = 0; i < kNumShapeTypes; i++) {
+      numShapesByType[i] = 0;
+    }
+    for (const Shape* shape : scene->shapes) {
+      numShapesByType[static_cast<uint32_t>(shape->type())]++;
+    }
+
+    const char* shapeTypes[] = { "cones", "curves", "cylinders", "disks", "hyperboloids", "paraboloids", "spheres", "trianglemeshes", "heightfields", "loopsubdivs", "nurbses", "plymeshes", nullptr };
+
+    printf("==== Shapes ====\n");
+    for (uint32_t i = 0; i < kNumShapeTypes; i++) {
+      printf("%7u %s\n", numShapesByType[i], shapeTypes[i]);
+    }
+  }
+
 } // namespace minipbrt
 
 
@@ -253,7 +278,6 @@ int main(int argc, char** argv)
   }
 
   minipbrt::Parser parser;
-//  parser.tokenizer().set_buffer_capacity(1024 * 1024);
   bool ok = parser.parse(argv[1]);
   if (!ok) {
     minipbrt::print_error(parser.get_error());

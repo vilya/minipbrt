@@ -89,7 +89,7 @@ namespace minipbrt {
 
   static constexpr size_t kDefaultBufCapacity = 1024 * 1024 - 1;
 
-  static constexpr uint32_t kInvalidTexture = 0xFFFFFFFFu;
+  static constexpr uint32_t kInvalidIndex = 0xFFFFFFFFu;
 
 
   //
@@ -275,6 +275,7 @@ namespace minipbrt {
 
 
   struct Camera {
+    Transform worldToCamera;
     float shutteropen  = 0.0f;
     float shutterclose = 1.0f;
 
@@ -656,21 +657,21 @@ namespace minipbrt {
 
 
   struct DisneyMaterial : public Material {
-    ColorTex color            = { {0.5f, 0.5f, 0.5f}, kInvalidTexture };
-    FloatTex anisotropic      = { 0.0f, kInvalidTexture };
-    FloatTex clearcoat        = { 0.0f, kInvalidTexture };
-    FloatTex clearcoatgloss   = { 1.0f, kInvalidTexture };
-    FloatTex eta              = { 1.5f, kInvalidTexture };
-    FloatTex metallic         = { 0.0f, kInvalidTexture };
-    FloatTex roughness        = { 0.5f, kInvalidTexture };
-    ColorTex scatterdistance  = { {0.0f, 0.0f, 0.0f}, kInvalidTexture };
-    FloatTex sheen            = { 0.0f, kInvalidTexture };
-    FloatTex sheentint        = { 0.5f, kInvalidTexture };
-    FloatTex spectrans        = { 0.0f, kInvalidTexture };
-    FloatTex speculartint     = { 0.0f, kInvalidTexture };
+    ColorTex color            = { {0.5f, 0.5f, 0.5f}, kInvalidIndex };
+    FloatTex anisotropic      = { 0.0f, kInvalidIndex };
+    FloatTex clearcoat        = { 0.0f, kInvalidIndex };
+    FloatTex clearcoatgloss   = { 1.0f, kInvalidIndex };
+    FloatTex eta              = { 1.5f, kInvalidIndex };
+    FloatTex metallic         = { 0.0f, kInvalidIndex };
+    FloatTex roughness        = { 0.5f, kInvalidIndex };
+    ColorTex scatterdistance  = { {0.0f, 0.0f, 0.0f}, kInvalidIndex };
+    FloatTex sheen            = { 0.0f, kInvalidIndex };
+    FloatTex sheentint        = { 0.5f, kInvalidIndex };
+    FloatTex spectrans        = { 0.0f, kInvalidIndex };
+    FloatTex speculartint     = { 0.0f, kInvalidIndex };
     bool thin                     = false;
-    ColorTex difftrans        = { {1.0f, 1.0f, 1.0f}, kInvalidTexture }; // only used if `thin == true`
-    ColorTex flatness         = { {0.0f, 0.0f, 0.0f}, kInvalidTexture }; // only used if `thin == true`
+    ColorTex difftrans        = { {1.0f, 1.0f, 1.0f}, kInvalidIndex }; // only used if `thin == true`
+    ColorTex flatness         = { {0.0f, 0.0f, 0.0f}, kInvalidIndex }; // only used if `thin == true`
 
     virtual ~DisneyMaterial() override {}
     virtual MaterialType type() const override { return MaterialType::Disney; }
@@ -686,11 +687,11 @@ namespace minipbrt {
 
 
   struct GlassMaterial : public Material {
-    ColorTex Kr         = { {1.0f, 1.0f, 1.0f}, kInvalidTexture };
-    ColorTex Kt         = { {1.0f, 1.0f, 1.0f}, kInvalidTexture };
-    FloatTex eta        = { 1.5f, kInvalidTexture };
-    FloatTex uroughness = { 0.0f, kInvalidTexture };
-    FloatTex vroughness = { 0.0f, kInvalidTexture };
+    ColorTex Kr         = { {1.0f, 1.0f, 1.0f}, kInvalidIndex };
+    ColorTex Kt         = { {1.0f, 1.0f, 1.0f}, kInvalidIndex };
+    FloatTex eta        = { 1.5f, kInvalidIndex };
+    FloatTex uroughness = { 0.0f, kInvalidIndex };
+    FloatTex vroughness = { 0.0f, kInvalidIndex };
     bool remaproughness = true;
 
     virtual ~GlassMaterial() override {}
@@ -699,15 +700,15 @@ namespace minipbrt {
 
 
   struct HairMaterial : public Material {
-    ColorTex sigma_a     = { {0.0f, 0.0f, 0.0f}, kInvalidTexture };
-    ColorTex color       = { {0.0f, 0.0f, 0.0f}, kInvalidTexture };
-    FloatTex eumelanin   = { 1.3f, kInvalidTexture };
-    FloatTex pheomelanin = { 0.0f, kInvalidTexture };
+    ColorTex sigma_a     = { {0.0f, 0.0f, 0.0f}, kInvalidIndex };
+    ColorTex color       = { {0.0f, 0.0f, 0.0f}, kInvalidIndex };
+    FloatTex eumelanin   = { 1.3f, kInvalidIndex };
+    FloatTex pheomelanin = { 0.0f, kInvalidIndex };
 
-    FloatTex eta         = { 1.55f, kInvalidTexture };
-    FloatTex beta_m      = { 0.3f, kInvalidTexture };
-    FloatTex beta_n      = { 0.3f, kInvalidTexture };
-    FloatTex alpha       = { 2.0f, kInvalidTexture };
+    FloatTex eta         = { 1.55f, kInvalidIndex };
+    FloatTex beta_m      = { 0.3f, kInvalidIndex };
+    FloatTex beta_n      = { 0.3f, kInvalidIndex };
+    FloatTex alpha       = { 2.0f, kInvalidIndex };
 
     virtual ~HairMaterial() override {}
     virtual MaterialType type() const override { return MaterialType::Hair; }
@@ -715,13 +716,13 @@ namespace minipbrt {
 
 
   struct KdSubsurfaceMaterial : public Material {
-    ColorTex Kd         = { {0.5f, 0.5f, 0.5f}, kInvalidTexture };
-    ColorTex mfp        = { {0.5f, 0.5f, 0.5f}, kInvalidTexture };
-    FloatTex eta        = { 1.3f, kInvalidTexture };
-    ColorTex Kr         = { {1.0f, 1.0f, 1.0f}, kInvalidTexture };
-    ColorTex Kt         = { {1.0f, 1.0f, 1.0f}, kInvalidTexture };
-    FloatTex uroughness = { 0.0f, kInvalidTexture };
-    FloatTex vroughness = { 0.0f, kInvalidTexture };
+    ColorTex Kd         = { {0.5f, 0.5f, 0.5f}, kInvalidIndex };
+    ColorTex mfp        = { {0.5f, 0.5f, 0.5f}, kInvalidIndex };
+    FloatTex eta        = { 1.3f, kInvalidIndex };
+    ColorTex Kr         = { {1.0f, 1.0f, 1.0f}, kInvalidIndex };
+    ColorTex Kt         = { {1.0f, 1.0f, 1.0f}, kInvalidIndex };
+    FloatTex uroughness = { 0.0f, kInvalidIndex };
+    FloatTex vroughness = { 0.0f, kInvalidIndex };
     bool remaproughness = true;
 
     virtual ~KdSubsurfaceMaterial() override {}
@@ -730,8 +731,8 @@ namespace minipbrt {
 
 
   struct MatteMaterial : public Material {
-    ColorTex Kd         = { {0.5f, 0.5f, 0.5f}, kInvalidTexture };
-    FloatTex sigma      = { 0.0f, kInvalidTexture };
+    ColorTex Kd         = { {0.5f, 0.5f, 0.5f}, kInvalidIndex };
+    FloatTex sigma      = { 0.0f, kInvalidIndex };
 
     virtual ~MatteMaterial() override {}
     virtual MaterialType type() const override { return MaterialType::Matte; }
@@ -739,10 +740,10 @@ namespace minipbrt {
 
 
   struct MetalMaterial : public Material {
-    ColorTex eta        = { {0.5f, 0.5f, 0.5f}, kInvalidTexture }; // TODO: indices of refraction for copper
-    ColorTex k          = { {0.5f, 0.5f, 0.5f}, kInvalidTexture }; // TODO: absorption coefficients for copper
-    FloatTex uroughness = { 0.01f, kInvalidTexture };
-    FloatTex vroughness = { 0.01f, kInvalidTexture };
+    ColorTex eta        = { {0.5f, 0.5f, 0.5f}, kInvalidIndex }; // TODO: indices of refraction for copper
+    ColorTex k          = { {0.5f, 0.5f, 0.5f}, kInvalidIndex }; // TODO: absorption coefficients for copper
+    FloatTex uroughness = { 0.01f, kInvalidIndex };
+    FloatTex vroughness = { 0.01f, kInvalidIndex };
     bool remaproughness = true;
 
     virtual ~MetalMaterial() override {}
@@ -751,7 +752,7 @@ namespace minipbrt {
 
 
   struct MirrorMaterial : public Material {
-    ColorTex Kr         = { {0.9f, 0.9f, 0.9f}, kInvalidTexture };
+    ColorTex Kr         = { {0.9f, 0.9f, 0.9f}, kInvalidIndex };
 
     virtual ~MirrorMaterial() override {}
     virtual MaterialType type() const override { return MaterialType::Mirror; }
@@ -759,7 +760,7 @@ namespace minipbrt {
 
 
   struct MixMaterial : public Material {
-    ColorTex amount          = { {0.9f, 0.9f, 0.9f}, kInvalidTexture };
+    ColorTex amount          = { {0.9f, 0.9f, 0.9f}, kInvalidIndex };
     Material* namedmaterial1 = nullptr;
     Material* namedmaterial2 = nullptr;
 
@@ -775,9 +776,9 @@ namespace minipbrt {
 
 
   struct PlasticMaterial : public Material {
-    ColorTex Kd         = { {0.25f, 0.25f, 0.25f}, kInvalidTexture };
-    ColorTex Ks         = { {0.25f, 0.25f, 0.25f}, kInvalidTexture };
-    FloatTex roughness  = { 0.1f, kInvalidTexture };
+    ColorTex Kd         = { {0.25f, 0.25f, 0.25f}, kInvalidIndex };
+    ColorTex Ks         = { {0.25f, 0.25f, 0.25f}, kInvalidIndex };
+    FloatTex roughness  = { 0.1f, kInvalidIndex };
     bool remaproughness = true;
 
     virtual ~PlasticMaterial() override {}
@@ -786,10 +787,10 @@ namespace minipbrt {
 
 
   struct SubstrateMaterial : public Material {
-    ColorTex Kd         = { {0.5f, 0.5f, 0.5f}, kInvalidTexture };
-    ColorTex Ks         = { {0.5f, 0.5f, 0.5f}, kInvalidTexture };
-    FloatTex uroughness = { 0.1f, kInvalidTexture };
-    FloatTex vroughness = { 0.1f, kInvalidTexture };
+    ColorTex Kd         = { {0.5f, 0.5f, 0.5f}, kInvalidIndex };
+    ColorTex Ks         = { {0.5f, 0.5f, 0.5f}, kInvalidIndex };
+    FloatTex uroughness = { 0.1f, kInvalidIndex };
+    FloatTex vroughness = { 0.1f, kInvalidIndex };
     bool remaproughness = true;
 
     virtual ~SubstrateMaterial() override {}
@@ -799,14 +800,14 @@ namespace minipbrt {
 
   struct SubsurfaceMaterial : public Material {
     const char* name        = nullptr; // name of the measured subsurface scattering coefficients
-    ColorTex sigma_a        = { {0.0011f, 0.0024f, 0.014f}, kInvalidTexture };
-    ColorTex sigma_prime_s  = { {2.55f, 3.12f, 3.77f}, kInvalidTexture };
+    ColorTex sigma_a        = { {0.0011f, 0.0024f, 0.014f}, kInvalidIndex };
+    ColorTex sigma_prime_s  = { {2.55f, 3.12f, 3.77f}, kInvalidIndex };
     float scale             = 1.0f;
-    FloatTex eta            = { 1.33f, kInvalidTexture };
-    ColorTex Kr             = { {1.0f, 1.0f, 1.0f}, kInvalidTexture };
-    ColorTex Kt             = { {1.0f, 1.0f, 1.0f}, kInvalidTexture };
-    FloatTex uroughness     = { 0.0f, kInvalidTexture };
-    FloatTex vroughness     = { 0.0f, kInvalidTexture };
+    FloatTex eta            = { 1.33f, kInvalidIndex };
+    ColorTex Kr             = { {1.0f, 1.0f, 1.0f}, kInvalidIndex };
+    ColorTex Kt             = { {1.0f, 1.0f, 1.0f}, kInvalidIndex };
+    FloatTex uroughness     = { 0.0f, kInvalidIndex };
+    FloatTex vroughness     = { 0.0f, kInvalidIndex };
     bool remaproughness     = true;
 
     virtual ~SubsurfaceMaterial() override {}
@@ -815,11 +816,11 @@ namespace minipbrt {
 
 
   struct TranslucentMaterial : public Material {
-    ColorTex Kd         = { {0.25f, 0.25f, 0.25f}, kInvalidTexture };
-    ColorTex Ks         = { {0.25f, 0.25f, 0.25f}, kInvalidTexture };
-    ColorTex reflect    = { {0.5f, 0.5f, 0.5f}, kInvalidTexture };
-    ColorTex transmit   = { {0.5f, 0.5f, 0.5f}, kInvalidTexture };
-    FloatTex roughness  = { 0.1f, kInvalidTexture };
+    ColorTex Kd         = { {0.25f, 0.25f, 0.25f}, kInvalidIndex };
+    ColorTex Ks         = { {0.25f, 0.25f, 0.25f}, kInvalidIndex };
+    ColorTex reflect    = { {0.5f, 0.5f, 0.5f}, kInvalidIndex };
+    ColorTex transmit   = { {0.5f, 0.5f, 0.5f}, kInvalidIndex };
+    FloatTex roughness  = { 0.1f, kInvalidIndex };
     bool remaproughness = true;
 
     virtual ~TranslucentMaterial() override {}
@@ -828,14 +829,14 @@ namespace minipbrt {
 
 
   struct UberMaterial : public Material {
-    ColorTex Kd         = { {0.25f, 0.25f, 0.25f}, kInvalidTexture };
-    ColorTex Ks         = { {0.25f, 0.25f, 0.25f}, kInvalidTexture };
-    ColorTex Kr         = { {0.0f, 0.0f, 0.0f}, kInvalidTexture };
-    ColorTex Kt         = { {0.0f, 0.0f, 0.0f}, kInvalidTexture };
-    FloatTex eta        = { 1.5f, kInvalidTexture };
-    ColorTex opacity    = { {1.0f, 1.0f, 1.0f}, kInvalidTexture };
-    FloatTex uroughness = { 0.1f, kInvalidTexture };
-    FloatTex vroughness = { 0.1f, kInvalidTexture };
+    ColorTex Kd         = { {0.25f, 0.25f, 0.25f}, kInvalidIndex };
+    ColorTex Ks         = { {0.25f, 0.25f, 0.25f}, kInvalidIndex };
+    ColorTex Kr         = { {0.0f, 0.0f, 0.0f}, kInvalidIndex };
+    ColorTex Kt         = { {0.0f, 0.0f, 0.0f}, kInvalidIndex };
+    FloatTex eta        = { 1.5f, kInvalidIndex };
+    ColorTex opacity    = { {1.0f, 1.0f, 1.0f}, kInvalidIndex };
+    FloatTex uroughness = { 0.1f, kInvalidIndex };
+    FloatTex vroughness = { 0.1f, kInvalidIndex };
     bool remaproughness = true;
 
     virtual ~UberMaterial() override {}
@@ -992,10 +993,11 @@ namespace minipbrt {
 
   struct Shape {
     Transform shapeToWorld; // If shape is part of an object, this is the shapeToObject transform.
-    Object* object        = nullptr;
-    AreaLight* areaLight  = nullptr;
-    Medium* insideMedium  = nullptr;
-    Medium* outsideMedium = nullptr;
+    uint32_t object         = kInvalidIndex;
+    uint32_t areaLight      = kInvalidIndex;
+    uint32_t insideMedium   = kInvalidIndex;
+    uint32_t outsideMedium  = kInvalidIndex;
+    bool reverseOrientation = false;
 
     virtual ~Shape() {}
     virtual ShapeType type() const = 0;
@@ -1112,8 +1114,8 @@ namespace minipbrt {
 
   struct PLYMesh : public Shape {
     char* filename        = nullptr;
-    Texture* alpha        = nullptr;
-    Texture* shadowalpha  = nullptr;
+    uint32_t alpha        = kInvalidIndex;
+    uint32_t shadowalpha  = kInvalidIndex;
 
     virtual ~PLYMesh() override {
       delete[] filename;
@@ -1152,8 +1154,8 @@ namespace minipbrt {
     float* S                  = nullptr; // Elements 3i, 3i+1 and 3i+2 are the xyz tangent components for vertex i.
     float* uv                 = nullptr; // Elements 2i and 2i+1 are the uv coords for vertex i.
     unsigned int num_vertices = 0;       // Number of vertices. Multiply by 3 to get the number of floats in P, N or S. Multiply by 2 to get the number of floats in uv.
-    Texture* alpha            = nullptr;
-    Texture* shadowalpha      = nullptr;
+    uint32_t alpha            = kInvalidIndex;
+    uint32_t shadowalpha      = kInvalidIndex;
 
     virtual ~TriangleMesh() override {
       delete[] indices;
@@ -1250,10 +1252,10 @@ namespace minipbrt {
 
 
   struct BilerpTexture : public Texture2D {
-    ColorTex v00 = { {0.0f, 0.0f, 0.0f}, kInvalidTexture };
-    ColorTex v01 = { {1.0f, 1.0f, 1.0f}, kInvalidTexture };
-    ColorTex v10 = { {0.0f, 0.0f, 0.0f}, kInvalidTexture };
-    ColorTex v11 = { {1.0f, 1.0f, 1.0f}, kInvalidTexture };
+    ColorTex v00 = { {0.0f, 0.0f, 0.0f}, kInvalidIndex };
+    ColorTex v01 = { {1.0f, 1.0f, 1.0f}, kInvalidIndex };
+    ColorTex v10 = { {0.0f, 0.0f, 0.0f}, kInvalidIndex };
+    ColorTex v11 = { {1.0f, 1.0f, 1.0f}, kInvalidIndex };
 
     virtual ~BilerpTexture() override {}
     virtual TextureType type() const override { return TextureType::Bilerp; }
@@ -1261,8 +1263,8 @@ namespace minipbrt {
 
   
   struct Checkerboard2DTexture : public Texture2D {
-    ColorTex tex1             = { {1.0f, 1.0f, 1.0f}, kInvalidTexture };
-    ColorTex tex2             = { {0.0f, 0.0f, 0.0f}, kInvalidTexture };
+    ColorTex tex1             = { {1.0f, 1.0f, 1.0f}, kInvalidIndex };
+    ColorTex tex2             = { {0.0f, 0.0f, 0.0f}, kInvalidIndex };
     CheckerboardAAMode aamode = CheckerboardAAMode::ClosedForm;
 
     virtual ~Checkerboard2DTexture() override {}
@@ -1271,8 +1273,8 @@ namespace minipbrt {
 
   
   struct Checkerboard3DTexture : public Texture3D {
-    ColorTex tex1             = { {1.0f, 1.0f, 1.0f}, kInvalidTexture };
-    ColorTex tex2             = { {0.0f, 0.0f, 0.0f}, kInvalidTexture };
+    ColorTex tex1             = { {1.0f, 1.0f, 1.0f}, kInvalidIndex };
+    ColorTex tex2             = { {0.0f, 0.0f, 0.0f}, kInvalidIndex };
 
     virtual ~Checkerboard3DTexture() override {}
     virtual TextureType type() const override { return TextureType::Checkerboard3D; }
@@ -1288,8 +1290,8 @@ namespace minipbrt {
   
 
   struct DotsTexture : public Texture2D {
-    ColorTex inside  = { {1.0f, 1.0f, 1.0f}, kInvalidTexture };
-    ColorTex outside = { {0.0f, 0.0f, 0.0f}, kInvalidTexture };
+    ColorTex inside  = { {1.0f, 1.0f, 1.0f}, kInvalidIndex };
+    ColorTex outside = { {0.0f, 0.0f, 0.0f}, kInvalidIndex };
 
     virtual ~DotsTexture() override {}
     virtual TextureType type() const override { return TextureType::Dots; }
@@ -1330,9 +1332,9 @@ namespace minipbrt {
   
 
   struct MixTexture : public TextureAnyD {
-    ColorTex tex1   = { {1.0f, 1.0f, 1.0f}, kInvalidTexture };
-    ColorTex tex2   = { {0.0f, 0.0f, 0.0f}, kInvalidTexture };
-    FloatTex amount = { 0.5f, kInvalidTexture };
+    ColorTex tex1   = { {1.0f, 1.0f, 1.0f}, kInvalidIndex };
+    ColorTex tex2   = { {0.0f, 0.0f, 0.0f}, kInvalidIndex };
+    FloatTex amount = { 0.5f, kInvalidIndex };
 
     virtual ~MixTexture() override {}
     virtual TextureType type() const override { return TextureType::Mix; }
@@ -1340,8 +1342,8 @@ namespace minipbrt {
   
 
   struct ScaleTexture : public TextureAnyD {
-    ColorTex tex1             = { {1.0f, 1.0f, 1.0f}, kInvalidTexture };
-    ColorTex tex2             = { {0.0f, 0.0f, 0.0f}, kInvalidTexture };
+    ColorTex tex1             = { {1.0f, 1.0f, 1.0f}, kInvalidIndex };
+    ColorTex tex2             = { {0.0f, 0.0f, 0.0f}, kInvalidIndex };
 
     virtual ~ScaleTexture() override {}
     virtual TextureType type() const override { return TextureType::Scale; }
@@ -1388,20 +1390,27 @@ namespace minipbrt {
 
   struct Object {
     const char* name = nullptr;
-    Transform objectToInstance; // row major
-    std::vector<Shape*> shapes;
-    std::vector<Instance*> instances;
+    Transform objectToInstance;
+    uint32_t* shapes           = nullptr;
+    uint32_t* instances        = nullptr;
+    unsigned int numShapes     = 0;
+    unsigned int numInstances  = 0;
+
+    ~Object() {
+      delete[] shapes;
+      delete[] instances;
+    }
   };
 
 
   struct Instance {
-    const char* name      = nullptr;
-    Transform instanceToWorld;     //!< row major
-    Object* object        = nullptr; //!< The object that this is an instance of.
-    Material* material    = nullptr; //!< The material for this instance. Overrides any material settings on the object.
-    AreaLight* areaLight  = nullptr; //!< If non-null, the instance emits light as described by this area light object.
-    Medium* insideMedium  = nullptr;
-    Medium* outsideMedium = nullptr;
+    Transform instanceToWorld;
+    uint32_t object          = kInvalidIndex; //!< The object that this is an instance of.
+    uint32_t material        = kInvalidIndex; //!< The material for this instance. Overrides any material settings on the object.
+    uint32_t areaLight       = kInvalidIndex; //!< If non-null, the instance emits light as described by this area light object.
+    uint32_t insideMedium    = kInvalidIndex;
+    uint32_t outsideMedium   = kInvalidIndex;
+    bool reverseOrientation  = false;
   };
 
 
@@ -1603,12 +1612,12 @@ namespace minipbrt {
     bool parse_Shape();
     bool parse_AreaLightSource();
     bool parse_LightSource();
-    bool parse_Material();          // todo
-    bool parse_MakeNamedMaterial(); // todo
+    bool parse_Material();
+    bool parse_MakeNamedMaterial();
     bool parse_NamedMaterial();
-    bool parse_ObjectBegin();       // todo
-    bool parse_ObjectEnd();         // todo
-    bool parse_ObjectInstance();    // todo
+    bool parse_ObjectBegin();
+    bool parse_ObjectEnd();
+    bool parse_ObjectInstance();
     bool parse_Texture();           // todo
     bool parse_TransformBegin();
     bool parse_TransformEnd();
@@ -1621,7 +1630,7 @@ namespace minipbrt {
     bool parse_Sampler();
     bool parse_TransformTimes();
 
-    bool parse_material_common(MaterialType materialType, const char* materialName, Material** materialOut);
+    bool parse_material_common(MaterialType materialType, const char* materialName, uint32_t* materialOut); // TODO
 
     bool parse_statement();
     bool parse_args(const StatementDeclaration& statement);
@@ -1633,8 +1642,6 @@ namespace minipbrt {
     bool parse_spectrum(uint32_t* count);
     bool parse_strings(uint32_t* count);
     bool parse_bools(uint32_t* count);
-
-    bool material_params(MaterialType materialType, Material* dest);
 
     const char* string_arg(uint32_t index) const;
     int enum_arg(uint32_t index) const;
@@ -1656,7 +1663,7 @@ namespace minipbrt {
     bool float_array_param(const char* name, ParamType expectedType, uint32_t len, float* dest);
     bool float_vector_param(const char* name, ParamType expectedType, uint32_t *len, float** dest, bool copy);
     bool spectrum_param_as_rgb(const char* name, float dest[3]);
-    bool texture_param(const char* name, Texture** dest);
+    bool texture_param(const char* name, uint32_t* dest);
     bool enum_param(const char* name, const char* values[], int* dest);
 
     template <class T>
@@ -1666,9 +1673,10 @@ namespace minipbrt {
 
     void save_current_transform_matrices(Transform* dest) const;
 
-    Medium* find_medium(const char* name);
-    Material* find_material(const char* name);
-    Texture* find_texture(const char* name);
+    uint32_t find_object(const char* name) const;
+    uint32_t find_medium(const char* name) const;
+    uint32_t find_material(const char* name) const;
+    uint32_t find_texture(const char* name) const;
 
     void push_bytes(void* src, size_t numBytes);
 
@@ -1677,7 +1685,7 @@ namespace minipbrt {
     bool m_inWorld               = false;
     TransformStack* m_transforms = nullptr;
     AttributeStack* m_attrs      = nullptr;
-    Object* m_activeObject       = nullptr;
+    uint32_t m_activeObject      = kInvalidIndex;
 
     Scene* m_scene               = nullptr;
 
@@ -1685,15 +1693,10 @@ namespace minipbrt {
     uint32_t m_statementIndex = uint32_t(-1);
     std::vector<ParamInfo> m_params;
     std::vector<uint8_t> m_temp;
-  };
 
-
-  //
-  // SceneBuilder
-  //
-
-  class SceneBuilder {
-
+    // Temporary storage for the active object.
+    std::vector<uint32_t> m_tempShapes;
+    std::vector<uint32_t> m_tempInstances;
   };
 
 } // namespace minipbrt

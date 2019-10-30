@@ -1,4 +1,26 @@
-// Copyright 2019 Vilya Harvey
+/*
+MIT License
+
+Copyright (c) 2019 Vilya Harvey
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
 
 #include <cstdarg>
 #include <cstdint>
@@ -7,7 +29,8 @@
 #include <vector>
 
 
-/// minipbrt - A simple and fast parser for PBRT v3 files.
+/// minipbrt - A simple and fast parser for PBRT v3 files
+/// =====================================================
 ///
 /// For info about the PBRT file format, see:
 /// https://www.pbrt.org/fileformat-v3.html
@@ -39,21 +62,24 @@
 /// Implementation notes
 /// --------------------
 ///
-/// - Spectra are always converted to RGB at load time. (This may change in
+/// * The code is C++11. 
+/// 
+/// * Spectra are always converted to RGB at load time. (This may change in
 ///   future; for now it simplifies things to convert them straight away).
-///
-/// - PLY files are not automatically loaded. Call `load_ply_mesh` to load one
+/// 
+/// * PLY files are not automatically loaded. Call `load_ply_mesh` to load one
 ///   of them. You can call this for each plymesh shape in parallel, or you can
 ///   call `load_ply_meshes` to load them all on a single thread.
-///
-/// - Likewise, we provide helper functions for triangulating shapes but it's
+///   (This is not implemented yet)
+/// 
+/// * Likewise, we provide helper functions for triangulating shapes but it's
 ///   up to you to call them.
-///
-/// - Most material properties can be either a texture or a value. The material
-///   structs have a pair of member variables for each of these: one named
-///   `fooValue` and the other named `fooTexture` (where `foo` is the name of
-///   the property in the PBRT file). If `fooTexture` is non-null, you should
-///   use this *instead* of `fooValue`.
+///   (These aren't implemented yet either - see TODO.md)
+/// 
+/// * Most material properties can be either a texture or a value. These
+///   properties are represented as structs with type `ColorTex` or `FloatTex`. In
+///   both structs, if the `texture` member is anything other than
+///   `kInvalidTexture`, the texture should be used *instead* of the `value`.
 
 namespace minipbrt {
 

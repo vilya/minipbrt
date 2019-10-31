@@ -897,13 +897,6 @@ namespace minipbrt {
   }
 
 
-  static void blackbody_to_rgb(const float blackbody[2], float rgb[2])
-  {
-    // TODO
-    assert(false); // not implemented yet!
-  }
-
-
   struct SpectrumEntry {
     float wavelength, value;
   };
@@ -1055,6 +1048,47 @@ namespace minipbrt {
   {
     float xyz[3];
     spectrum_to_xyz(spectrum, numEntries, xyz);
+    xyz_to_rgb(xyz, rgb);
+  }
+
+
+  static void blackbody_to_xyz(const float blackbody[2], float xyz[3])
+  {
+    const float c = 299792458.0f;
+    const float h = 6.62606957e-34f;
+    const float kb = 1.3806488e-23f;
+
+    float t = blackbody[0]; // temperature in Kelvin
+
+    xyz[0] = 0.0f;
+    xyz[1] = 0.0f;
+    xyz[2] = 0.0f;
+    for (int i = 0; i < nSpectralSamples; i++) {
+      float wl = lerp(float(i) / float(nSpectralSamples), sampledLambdaStart, sampledLambdaEnd);
+
+      // Calculate `Le`, the amount of light emitted at wavelength = `wl`.
+      // `wl` is deliberately chose to match the wavelengths at which the X, Y
+      // and Z curves are sampled.
+      float l = wl * 1e-9f;
+      float lambda5 = (l * l) * (l * l) * l;
+      float Le = (2.0f * h * c * c) / (lambda5 * (std::exp((h * c) / (l * kb  * t)) - 1));
+
+      xyz[0] += X[i] * Le;
+      xyz[1] += Y[i] * Le;
+      xyz[2] += Z[i] * Le;
+    }
+
+    float scale = blackbody[1] * float(sampledLambdaEnd - sampledLambdaStart) / float(CIE_Y_integral * nSpectralSamples);
+    xyz[0] *= scale;
+    xyz[1] *= scale;
+    xyz[2] *= scale;
+  }
+
+
+  static void blackbody_to_rgb(const float blackbody[2], float rgb[3])
+  {
+    float xyz[3];
+    blackbody_to_xyz(blackbody, xyz);
     xyz_to_rgb(xyz, rgb);
   }
 

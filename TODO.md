@@ -5,12 +5,12 @@ Must have (parser is not correct without them)
 ----------------------------------------------
 
 Finish implementing:
-[x] `parse_material_common()` - properties for each material type
-[x] `parse_ObjectBegin()` - not implemented yet
-[x] `parse_ObjectEnd()`	- not implemented yet
-[x] `parse_ObjectInstance()` - not implemented yet
-[x] `parse_Texture()` - properties for each texture type
-[ ] `blackbody_to_rgb()` - not implemented yet
+[x] `parse_material_common()`
+[x] `parse_ObjectBegin()`
+[x] `parse_ObjectEnd()`
+[x] `parse_ObjectInstance()`
+[x] `parse_Texture()`
+[x] `blackbody_to_rgb()`
 
 Set up any missing defaults after the scene has been parsed:
 * e.g. Camera params which depend on the Film settings

@@ -19,6 +19,9 @@ General parsing
 * Brackets are allowed around arg lists, e.g. for Transform the 16 floats can
   be enclosed in '[' and ']' characters.
 
+* PBRT itself doesn't seem to allow forward references to named items, but
+  some of the scenes in the pbrt-v3-scenes collection do this.
+
 
 Curve shapes
 ------------
@@ -46,6 +49,13 @@ Integrators
 * PBRT supports two additional integrator types which aren't mentioned in the doc:
   * `"volpath"`
   * `"ao"`
+
+
+Coordinate Systems
+------------------
+
+* The Camera statement defines a coordinate system called "camera" as a side
+  effect.
 
 
 Other

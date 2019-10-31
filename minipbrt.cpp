@@ -93,6 +93,8 @@ namespace minipbrt {
     bool inWorld;
     const char** enum0;
     const char** enum1;
+    int enum0default;
+    int enum1default;
   };
 
 
@@ -100,9 +102,10 @@ namespace minipbrt {
   static const char* kShapeTypes[] = { "cone", "curve", "cylinder", "disk", "hyperboloid", "paraboloid", "sphere", "trianglemesh", "heightfield", "loopsubdiv", "nurbs", "plymesh", nullptr };
   static const char* kAreaLightTypes[] = { "diffuse", nullptr };
   static const char* kLightTypes[] = { "distant", "goniometric", "infinite", "point", "projection", "spot", nullptr };
-  static const char* kMaterialTypes[] = { "disney", "fourier", "glass", "hair", "kdsubsurface", "matte", "metal", "mirror", "mix", "none", "plastic", "substrate", "subsurface", "translucent", "uber", nullptr };
+  static const char* kMaterialTypes[] = { "disney", "fourier", "glass", "hair", "kdsubsurface", "matte", "metal", "mirror", "mix", "none", "plastic", "substrate", "subsurface", "translucent", "uber", "", nullptr };
   static const char* kTextureDataTypes[] = { "float", "spectrum", "color", nullptr };
-  static const char* kTextureTypes[] = { "bilerp", "checkerboard", "constant", "dots", "fbm", "imagemap", "marble", "mix", "scale", "uv", "windy", "wrinkled", "ptex", nullptr };
+  // Note that checkerboard appears twice below, because there are 2D and 3D versions of it.
+  static const char* kTextureTypes[] = { "bilerp", "checkerboard", "checkerboard", "constant", "dots", "fbm", "imagemap", "marble", "mix", "scale", "uv", "windy", "wrinkled", "ptex", nullptr };
   static const char* kAccelTypes[] = { "bvh", "kdtree", nullptr };
   static const char* kCameraTypes[] = { "perspective", "orthographic", "environment", "realistic", nullptr };
   static const char* kFilmTypes[] = { "image", nullptr };
@@ -121,45 +124,45 @@ namespace minipbrt {
 
   static const StatementDeclaration kStatements[] = {
     // Common statements, can appear in both preamble and world section.
-    { StatementID::Identity,          "Identity",            "",                 true,  true,  nullptr,                nullptr       },
-    { StatementID::Translate,         "Translate",           "fff",              true,  true,  nullptr,                nullptr       },
-    { StatementID::Scale,             "Scale",               "fff",              true,  true,  nullptr,                nullptr       },
-    { StatementID::Rotate,            "Rotate",              "ffff",             true,  true,  nullptr,                nullptr       },
-    { StatementID::LookAt,            "LookAt",              "fffffffff",        true,  true,  nullptr,                nullptr       },
-    { StatementID::CoordinateSystem,  "CoordinateSystem",    "s",                true,  true,  nullptr,                nullptr       },
-    { StatementID::CoordSysTransform, "CoordSysTransform",   "s",                true,  true,  nullptr,                nullptr       },
-    { StatementID::Transform,         "Transform",           "ffffffffffffffff", true,  true,  nullptr,                nullptr       },
-    { StatementID::ConcatTransform,   "ConcatTransform",     "ffffffffffffffff", true,  true,  nullptr,                nullptr       },
-    { StatementID::ActiveTransform,   "ActiveTransform",     "e",                true,  true,  kActiveTransformValues, nullptr       },
-    { StatementID::MakeNamedMedium,   "MakeNamedMedium",     "s",                true,  true,  nullptr,                nullptr       },
-    { StatementID::MediumInterface,   "MediumInterface",     "ss",               true,  true,  nullptr,                nullptr       },
-    { StatementID::Include,           "Include",             "s",                true,  true,  nullptr,                nullptr       },
+    { StatementID::Identity,          "Identity",            "",                 true,  true,  nullptr,                nullptr,       -1, -1  },
+    { StatementID::Translate,         "Translate",           "fff",              true,  true,  nullptr,                nullptr,       -1, -1  },
+    { StatementID::Scale,             "Scale",               "fff",              true,  true,  nullptr,                nullptr,       -1, -1  },
+    { StatementID::Rotate,            "Rotate",              "ffff",             true,  true,  nullptr,                nullptr,       -1, -1  },
+    { StatementID::LookAt,            "LookAt",              "fffffffff",        true,  true,  nullptr,                nullptr,       -1, -1  },
+    { StatementID::CoordinateSystem,  "CoordinateSystem",    "s",                true,  true,  nullptr,                nullptr,       -1, -1  },
+    { StatementID::CoordSysTransform, "CoordSysTransform",   "s",                true,  true,  nullptr,                nullptr,       -1, -1  },
+    { StatementID::Transform,         "Transform",           "ffffffffffffffff", true,  true,  nullptr,                nullptr,       -1, -1  },
+    { StatementID::ConcatTransform,   "ConcatTransform",     "ffffffffffffffff", true,  true,  nullptr,                nullptr,       -1, -1  },
+    { StatementID::ActiveTransform,   "ActiveTransform",     "k",                true,  true,  kActiveTransformValues, nullptr,       -1, -1  },
+    { StatementID::MakeNamedMedium,   "MakeNamedMedium",     "s",                true,  true,  nullptr,                nullptr,       -1, -1  },
+    { StatementID::MediumInterface,   "MediumInterface",     "ss",               true,  true,  nullptr,                nullptr,       -1, -1  },
+    { StatementID::Include,           "Include",             "s",                true,  true,  nullptr,                nullptr,       -1, -1  },
     // World-only statements, can only appear after a WorldBegin statement
-    { StatementID::AttributeBegin,     "AttributeBegin",     "",                 false, true,  nullptr,                nullptr       },
-    { StatementID::AttributeEnd,       "AttributeEnd",       "",                 false, true,  nullptr,                nullptr       },
-    { StatementID::Shape,              "Shape",              "e",                false, true,  kShapeTypes,            nullptr       },
-    { StatementID::AreaLightSource,    "AreaLightSource",    "e",                false, true,  kAreaLightTypes,        nullptr       },
-    { StatementID::LightSource,        "LightSource",        "e",                false, true,  kLightTypes,            nullptr       },
-    { StatementID::Material,           "Material",           "e",                false, true,  kMaterialTypes,         nullptr       },
-    { StatementID::MakeNamedMaterial,  "MakeNamedMaterial",  "s",                false, true,  nullptr,                nullptr       },
-    { StatementID::NamedMaterial,      "NamedMaterial",      "s",                false, true,  nullptr,                nullptr       },
-    { StatementID::ObjectBegin,        "ObjectBegin",        "s",                false, true,  nullptr,                nullptr       },
-    { StatementID::ObjectEnd,          "ObjectEnd",          "",                 false, true,  nullptr,                nullptr       },
-    { StatementID::ObjectInstance,     "ObjectInstance",     "s",                false, true,  nullptr,                nullptr       },
-    { StatementID::Texture,            "Texture",            "see",              false, true,  kTextureDataTypes,      kTextureTypes },
-    { StatementID::TransformBegin,     "TransformBegin",     "",                 false, true,  nullptr,                nullptr       },
-    { StatementID::TransformEnd,       "TransformEnd",       "",                 false, true,  nullptr,                nullptr       },
-    { StatementID::ReverseOrientation, "ReverseOrientation", "",                 false, true,  nullptr,                nullptr       },
-    { StatementID::WorldEnd,           "WorldEnd",           "",                 false, true,  nullptr,                nullptr       },
+    { StatementID::AttributeBegin,     "AttributeBegin",     "",                 false, true,  nullptr,                nullptr,       -1, -1 },
+    { StatementID::AttributeEnd,       "AttributeEnd",       "",                 false, true,  nullptr,                nullptr,       -1, -1 },
+    { StatementID::Shape,              "Shape",              "e",                false, true,  kShapeTypes,            nullptr,       -1, -1 },
+    { StatementID::AreaLightSource,    "AreaLightSource",    "e",                false, true,  kAreaLightTypes,        nullptr,       -1, -1 },
+    { StatementID::LightSource,        "LightSource",        "e",                false, true,  kLightTypes,            nullptr,       -1, -1 },
+    { StatementID::Material,           "Material",           "e",                false, true,  kMaterialTypes,         nullptr,        5, -1 },
+    { StatementID::MakeNamedMaterial,  "MakeNamedMaterial",  "s",                false, true,  nullptr,                nullptr,       -1, -1 },
+    { StatementID::NamedMaterial,      "NamedMaterial",      "s",                false, true,  nullptr,                nullptr,       -1, -1 },
+    { StatementID::ObjectBegin,        "ObjectBegin",        "s",                false, true,  nullptr,                nullptr,       -1, -1 },
+    { StatementID::ObjectEnd,          "ObjectEnd",          "",                 false, true,  nullptr,                nullptr,       -1, -1 },
+    { StatementID::ObjectInstance,     "ObjectInstance",     "s",                false, true,  nullptr,                nullptr,       -1, -1 },
+    { StatementID::Texture,            "Texture",            "see",              false, true,  kTextureDataTypes,      kTextureTypes, -1, -1 },
+    { StatementID::TransformBegin,     "TransformBegin",     "",                 false, true,  nullptr,                nullptr,       -1, -1 },
+    { StatementID::TransformEnd,       "TransformEnd",       "",                 false, true,  nullptr,                nullptr,       -1, -1 },
+    { StatementID::ReverseOrientation, "ReverseOrientation", "",                 false, true,  nullptr,                nullptr,       -1, -1 },
+    { StatementID::WorldEnd,           "WorldEnd",           "",                 false, true,  nullptr,                nullptr,       -1, -1 },
     // Preamble-only statements, cannot appear after a WorldBegin statement
-    { StatementID::Accelerator,        "Accelerator",        "e",                true,  false, kAccelTypes,            nullptr       },
-    { StatementID::Camera,             "Camera",             "e",                true,  false, kCameraTypes,           nullptr       },
-    { StatementID::Film,               "Film",               "e",                true,  false, kFilmTypes,             nullptr       },
-    { StatementID::Integrator,         "Integrator",         "e",                true,  false, kIntegratorTypes,       nullptr       },
-    { StatementID::PixelFilter,        "PixelFilter",        "e",                true,  false, kPixelFilterTypes,      nullptr       },
-    { StatementID::Sampler,            "Sampler",            "e",                true,  false, kSamplerTypes,          nullptr       },
-    { StatementID::TransformTimes,     "TransformTimes",     "ff",               true,  false, nullptr,                nullptr       },
-    { StatementID::WorldBegin,         "WorldBegin",         "",                 true,  false, nullptr,                nullptr       },
+    { StatementID::Accelerator,        "Accelerator",        "e",                true,  false, kAccelTypes,            nullptr,       -1, -1 },
+    { StatementID::Camera,             "Camera",             "e",                true,  false, kCameraTypes,           nullptr,       -1, -1 },
+    { StatementID::Film,               "Film",               "e",                true,  false, kFilmTypes,             nullptr,       -1, -1 },
+    { StatementID::Integrator,         "Integrator",         "e",                true,  false, kIntegratorTypes,       nullptr,       -1, -1 },
+    { StatementID::PixelFilter,        "PixelFilter",        "e",                true,  false, kPixelFilterTypes,      nullptr,       -1, -1 },
+    { StatementID::Sampler,            "Sampler",            "e",                true,  false, kSamplerTypes,          nullptr,       -1, -1 },
+    { StatementID::TransformTimes,     "TransformTimes",     "ff",               true,  false, nullptr,                nullptr,       -1, -1 },
+    { StatementID::WorldBegin,         "WorldBegin",         "",                 true,  false, nullptr,                nullptr,       -1, -1 },
   };
   static constexpr uint32_t kNumStatements = MINIPBRT_STATIC_ARRAY_LENGTH(kStatements);
 
@@ -185,7 +188,7 @@ namespace minipbrt {
     { ParamType::Vector2,   "vector2",   2, sizeof(float), nullptr  },
     { ParamType::Vector3,   "vector3",   3, sizeof(float), "vector" },
     { ParamType::Normal3,   "normal3",   3, sizeof(float), "normal" },
-    { ParamType::RGB,       "rgb",       3, sizeof(float), nullptr  },
+    { ParamType::RGB,       "rgb",       3, sizeof(float), "color"  },
     { ParamType::XYZ,       "xyz",       3, sizeof(float), nullptr  },
     { ParamType::Blackbody, "blackbody", 2, sizeof(float), nullptr  },
     { ParamType::Samples,   "spectrum",  2, sizeof(float), nullptr  },
@@ -697,6 +700,35 @@ namespace minipbrt {
     bool push();
     bool pop();
     void clear();
+  };
+
+
+  //
+  // NameResolver types
+  //
+
+  template <class T>
+  struct TypedNameResolver {
+    std::unordered_map<std::string, uint32_t> unresolved;
+    std::vector<T*>* items = nullptr;
+
+    uint32_t resolve(const char* name);
+    uint32_t find(const char* name);
+    char* unresolved_to_string() const;
+  };
+
+
+  struct NameResolver {
+    TypedNameResolver<Medium> mediums;
+    TypedNameResolver<Material> materials;
+    TypedNameResolver<Texture> textures;
+
+    NameResolver(Scene* scene)
+    {
+      mediums.items = &scene->mediums;
+      materials.items = &scene->materials;
+      textures.items  = &scene->textures;
+    }
   };
 
 
@@ -1445,6 +1477,66 @@ namespace minipbrt {
     top = attrs;
   }
 
+  //
+  // TypedNameResolver public methods
+  //
+
+  template <class T>
+  uint32_t TypedNameResolver<T>::resolve(const char* name)
+  {
+    auto it = unresolved.find(name);
+    if (it != unresolved.end()) {
+      return it->second;
+    }
+    uint32_t index = static_cast<uint32_t>(items->size());
+    items->push_back(nullptr);
+    unresolved[name] = index;
+    return index;
+  }
+
+
+  template <class T>
+  uint32_t TypedNameResolver<T>::find(const char* name)
+  {
+    auto it = unresolved.find(name);
+    if (it == unresolved.end()) {
+      return kInvalidIndex;
+    }
+    uint32_t index = it->second;
+    unresolved.erase(it);
+    return index;
+  }
+
+
+  template <class T>
+  char* TypedNameResolver<T>::unresolved_to_string() const
+  {
+    if (unresolved.empty()) {
+      return nullptr;
+    }
+    if (unresolved.size() == 1) {
+      return copy_string(unresolved.begin()->first.c_str());
+    }
+
+    size_t len = unresolved.size() * 2; // for the ", " after each name.
+    for (auto const& it : unresolved) {
+      len += it.first.size();
+    }
+    char* str = new char[len + 1];
+    char* pos = str;
+    for (auto const& it : unresolved) {
+      size_t nameLen = it.first.size();
+      std::memcpy(pos, it.first.c_str(), nameLen * sizeof(char));
+      pos += nameLen;
+      pos[0] = ',';
+      pos[1] = ' ';
+      pos += 2;
+    }
+    str[len - 1] = '\0'; // trim off the trailing ", "
+
+    return str;
+  }
+
 
   //
   // Scene public methods
@@ -1495,11 +1587,17 @@ namespace minipbrt {
   // Error public methods
   //
 
-  Error::Error(const char* theFilename, int64_t theOffset, const char* theMessage)
+  Error::Error(const char* theFilename, int64_t theOffset, const char* theMessage, const char* bufPos, const char* bufEnd)
   {
     m_filename = copy_string(theFilename);
     m_offset = theOffset;
     m_message = copy_string(theMessage);
+
+    // Copy the buffer contents.
+    for (int i = 0; i < 63 && bufPos < bufEnd; i++) {
+      m_bufContents[i] = *bufPos;
+      ++bufPos;
+    }
   }
 
 
@@ -1537,6 +1635,12 @@ namespace minipbrt {
   int64_t Error::column() const
   {
     return m_column;
+  }
+
+
+  const char* Error::buffer_contents() const
+  {
+    return m_bufContents;
   }
 
 
@@ -2181,6 +2285,26 @@ namespace minipbrt {
   }
 
 
+  bool Tokenizer::which_keyword(const char* values[], int* index)
+  {
+    for (int i = 0; values[i] != nullptr; i++) {
+      m_end = m_pos;
+      const char* str = values[i];
+      while (*m_end == *str && *str != '\0') {
+        ++m_end;
+        ++str;
+      }
+      if (*str == '\0' && !is_keyword_part(*m_end)) {
+        if (index != nullptr) {
+          *index = i;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+
   size_t Tokenizer::token_length() const
   {
     return static_cast<size_t>(m_end - m_pos);
@@ -2249,7 +2373,7 @@ namespace minipbrt {
     vsnprintf(errorMessage, size_t(len + 1), fmt, args);
     va_end(args);
 
-    m_error = new Error(fdata->filename, errorOffset, errorMessage);
+    m_error = new Error(fdata->filename, errorOffset, errorMessage, m_pos, m_bufEnd);
 
     int64_t errorLine, errorCol;
     cursor_location(&errorLine, &errorCol);
@@ -2284,6 +2408,8 @@ namespace minipbrt {
     m_scene->filter = new BoxFilter();
     m_scene->integrator = new PathIntegrator();
     m_scene->sampler = new HaltonSampler();
+
+    m_nameResolver = new NameResolver(m_scene);
   }
 
 
@@ -2316,6 +2442,42 @@ namespace minipbrt {
     while (ok && m_tokenizer.advance()) {
       ok = parse_statement();
     }
+
+    // If there are any undefined materials, set them to the default matte material.
+    for (size_t i = 0, endI = m_scene->materials.size(); i < endI; i++) {
+      if (m_scene->materials[i] == nullptr) {
+        m_scene->materials[i] = new MatteMaterial();
+      }
+      m_nameResolver->materials.unresolved.clear();
+    }
+
+    // Check for undefined forward references.
+    bool unresolvedMaterials = !m_nameResolver->materials.unresolved.empty();
+    if (unresolvedMaterials) {
+      char* str = m_nameResolver->materials.unresolved_to_string();
+      fprintf(stderr, "Unresolved materials: %s\n", str);
+      delete[] str;
+    }
+
+    bool unresolvedMediums = !m_nameResolver->mediums.unresolved.empty();
+    if (unresolvedMediums) {
+      char* str = m_nameResolver->mediums.unresolved_to_string();
+      fprintf(stderr, "Unresolved mediums: %s\n", str);
+      delete[] str;
+    }
+
+    bool unresolvedTextures = !m_nameResolver->textures.unresolved.empty();
+    if (unresolvedTextures) {
+      char* str = m_nameResolver->textures.unresolved_to_string();
+      fprintf(stderr, "Unresolved textures: %s\n", str);
+      delete[] str;
+    }
+
+    if (unresolvedMediums || unresolvedMaterials || unresolvedTextures) {
+      m_tokenizer.set_error("The scene contains references to undefined mediums, materials and/or textures.");
+      ok = false;
+    }
+
     return ok;
   }
 
@@ -2437,6 +2599,23 @@ namespace minipbrt {
       switch (*fmt) { // arg is an enum string
       case 'e':
         ok = m_tokenizer.which_string_literal(parsedEnum ? statement.enum1 : statement.enum0, &tmpInt);
+        if (!ok) {
+          tmpInt = parsedEnum ? statement.enum1default : statement.enum0default;
+          ok = true;
+        }
+        parsedEnum = true;
+        if (ok) {
+          m_params.push_back(ParamInfo{ "", ParamType::Int, m_temp.size(), 1 });
+          push_bytes(&tmpInt, sizeof(tmpInt));
+        }
+        break;
+
+      case 'k':
+        ok = m_tokenizer.which_keyword(parsedEnum ? statement.enum1 : statement.enum0, &tmpInt);
+        if (!ok) {
+          tmpInt = parsedEnum ? statement.enum1default : statement.enum0default;
+          ok = true;
+        }
         parsedEnum = true;
         if (ok) {
           m_params.push_back(ParamInfo{ "", ParamType::Int, m_temp.size(), 1 });
@@ -2640,9 +2819,15 @@ namespace minipbrt {
 
     medium->mediumName = copy_string(string_arg(0));
 
-    // Add the medium to the scene.
-    m_scene->mediums.push_back(medium);
-
+    // Add the medium to the scene. If there were any forward references to it
+    // then an array slot will already have been allocated for it.
+    uint32_t index = m_nameResolver->mediums.find(medium->mediumName);
+    if (index != kInvalidIndex) {
+      m_scene->mediums[index] = medium;
+    }
+    else {
+      m_scene->mediums.push_back(medium);
+    }
     return true;
   }
 
@@ -2656,8 +2841,7 @@ namespace minipbrt {
     if (m_inWorld && inside[0] != '\0') {
       insideMedium = find_medium(inside);
       if (insideMedium == kInvalidIndex) {
-        m_tokenizer.set_error("Inside medium '%s' has not been defined yet", inside);
-        return false;
+        insideMedium = m_nameResolver->mediums.resolve(inside);
       }
     }
 
@@ -2665,8 +2849,7 @@ namespace minipbrt {
     if (outside[0] != '\0') {
       outsideMedium = find_medium(outside);
       if (outsideMedium == kInvalidIndex) {
-        m_tokenizer.set_error("Outside medium '%s' has not been defined yet", outside);
-        return false;
+        outsideMedium = m_nameResolver->mediums.resolve(outside);
       }
     }
 
@@ -3111,7 +3294,15 @@ namespace minipbrt {
 
   bool Parser::parse_Material()
   {
-    MaterialType materialType = typed_enum_arg<MaterialType>(0);
+    MaterialType materialType;
+    int materialTypeIndex = enum_arg(0);
+    if (materialTypeIndex == int(MaterialType::Uber) + 1) {
+      materialType = MaterialType::None;
+    }
+    else {
+      materialType = static_cast<MaterialType>(materialTypeIndex);
+    }
+
     uint32_t material = kInvalidIndex;
     if (parse_material_common(materialType, nullptr, &material)) {
       m_attrs->top->activeMaterial = material;
@@ -3124,10 +3315,17 @@ namespace minipbrt {
   bool Parser::parse_MakeNamedMaterial()
   {
     MaterialType materialType;
-    bool ok = typed_enum_param("type", kMaterialTypes, &materialType);
+    int materialTypeIndex;
+    bool ok = enum_param("type", kMaterialTypes, &materialTypeIndex);
     if (!ok) {
       m_tokenizer.set_error("Unknown or invalid material type");
       return false;
+    }
+    if (materialTypeIndex == int(MaterialType::Uber) + 1) {
+      materialType = MaterialType::None;
+    }
+    else {
+      materialType = static_cast<MaterialType>(materialTypeIndex);
     }
 
     uint32_t material = kInvalidIndex;
@@ -3349,7 +3547,20 @@ namespace minipbrt {
 
     texture_param("bumpmap", &material->bumpmap);
 
-    material->name = copy_string(materialName);
+    // If there were any forward references to this material, there's already an array slot allocated for it.
+    if (materialName != nullptr) {
+      material->name = copy_string(materialName);
+
+      uint32_t index = m_nameResolver->materials.find(materialName);
+      if (index != kInvalidIndex) {
+        if (materialOut != nullptr) {
+          *materialOut = index;
+        }
+        m_scene->materials[index] = material;
+        return true;
+      }
+    }
+
     if (materialOut != nullptr) {
       *materialOut = static_cast<uint32_t>(m_scene->materials.size());
     }
@@ -3362,10 +3573,10 @@ namespace minipbrt {
   {
     const char* name = string_arg(0);
     uint32_t material = find_material(name);
-//    if (mat == kInvalidIndex) {
-//      m_tokenizer.set_error("Couldn't find any material named '%s'", name);
-//      return false;
-//    }
+    if (material == kInvalidIndex) {
+      // If the material hasn't been defined yet add it to the name resolver.
+      material = m_nameResolver->materials.resolve(name);
+    }
     m_attrs->top->activeMaterial = material;
     return true;
   }
@@ -3385,6 +3596,7 @@ namespace minipbrt {
     Object* object = new Object();
     save_current_transform_matrices(&object->objectToInstance);
     object->name = copy_string(string_arg(0));
+
     m_activeObject = static_cast<uint32_t>(m_scene->objects.size());
     m_scene->objects.push_back(object);
     return true;
@@ -3420,7 +3632,8 @@ namespace minipbrt {
 
     uint32_t object = find_object(name);
     if (object == kInvalidIndex) {
-      m_tokenizer.set_error("Unknown object \"%s\"", name);
+      // If the object hasn't been defined yet add it to the name resolver.
+      m_tokenizer.set_error("Object \"%s\" has not been defined yet", name);
       return false;
     }
 
@@ -3434,7 +3647,6 @@ namespace minipbrt {
     instance->reverseOrientation = m_attrs->top->reverseOrientation;
 
     if (m_activeObject != kInvalidIndex) {
-//      m_activeObject->instances.push_back(instance);
       m_tempInstances.push_back(static_cast<uint32_t>(m_scene->instances.size()));
     }
     m_scene->instances.push_back(instance);
@@ -3459,22 +3671,24 @@ namespace minipbrt {
       }
       break;
 
+    case TextureType::Checkerboard3D:
     case TextureType::Checkerboard2D:
       {
-        Checkerboard2DTexture* checkerboard2d = new Checkerboard2DTexture();
-        color_texture_param("tex1", &checkerboard2d->tex1);
-        color_texture_param("tex2", &checkerboard2d->tex2);
-        typed_enum_param("aamode", kCheckerboardAAModes, &checkerboard2d->aamode);
-        texture = checkerboard2d;
-      }
-      break;
-
-    case TextureType::Checkerboard3D:
-      {
-        Checkerboard3DTexture* checkerboard3d = new Checkerboard3DTexture();
-        color_texture_param("tex1", &checkerboard3d->tex1);
-        color_texture_param("tex2", &checkerboard3d->tex2);
-        texture = checkerboard3d;
+        int dimension = 2;
+        int_param("dimension", &dimension);
+        if (dimension == 3) {
+          Checkerboard3DTexture* checkerboard3d = new Checkerboard3DTexture();
+          color_texture_param("tex1", &checkerboard3d->tex1);
+          color_texture_param("tex2", &checkerboard3d->tex2);
+          texture = checkerboard3d;
+        }
+        else {
+          Checkerboard2DTexture* checkerboard2d = new Checkerboard2DTexture();
+          color_texture_param("tex1", &checkerboard2d->tex1);
+          color_texture_param("tex2", &checkerboard2d->tex2);
+          typed_enum_param("aamode", kCheckerboardAAModes, &checkerboard2d->aamode);
+          texture = checkerboard2d;
+        }
       }
       break;
 
@@ -3613,6 +3827,16 @@ namespace minipbrt {
 
     texture->name = copy_string(string_arg(0));
     texture->dataType = typed_enum_arg<TextureData>(1);
+
+    // If there were any forward references to this texture, it will already have an array slot allocated.
+    if (texture->name != nullptr) {
+      uint32_t index = m_nameResolver->textures.find(texture->name);
+      if (index != kInvalidIndex) {
+        m_scene->textures[index] = texture;
+        return true;
+      }
+    }
+
     m_scene->textures.push_back(texture);
     return true;
   }
@@ -3740,6 +3964,9 @@ namespace minipbrt {
     save_current_transform_matrices(&camera->worldToCamera);
     float_param("shutteropen", &camera->shutteropen);
     float_param("shutterclose", &camera->shutterclose);
+
+    // Creating a camera automatically defins the "camera" coordinate system.
+    m_transforms->coordinateSystem("camera");
 
     if (m_scene->camera != nullptr) {
       delete m_scene->camera; // Should we warn about multiple camera definitions here?
@@ -4204,7 +4431,7 @@ namespace minipbrt {
           return false;
         }
         push_bytes(pair, sizeof(pair));
-        (*count)++;
+        (*count) += 2;
       }
 
       m_tokenizer.pop_file();
@@ -4232,7 +4459,7 @@ namespace minipbrt {
         return false;
       }
       push_bytes(pair, sizeof(pair));
-      (*count)++;
+      (*count) += 2;
     }
     return true;
   }
@@ -4327,7 +4554,7 @@ namespace minipbrt {
 
   int Parser::enum_arg(uint32_t index) const
   {
-    assert(kStatements[m_statementIndex].argPattern[index] == 'e');
+    assert(kStatements[m_statementIndex].argPattern[index] == 'e' || kStatements[m_statementIndex].argPattern[index] == 'k');
     return *reinterpret_cast<const int*>(m_temp.data() + m_params[index].offset);
   }
 
@@ -4544,7 +4771,7 @@ namespace minipbrt {
       if (paramDesc->count == 0 || paramDesc->count % 2 != 0) {
         return false;
       }
-      spectrum_to_rgb(src, paramDesc->count, dest);
+      spectrum_to_rgb(src, paramDesc->count / 2, dest);
       break;
 
     default:
@@ -4564,7 +4791,8 @@ namespace minipbrt {
 
     uint32_t tex = find_texture(textureName);
     if (tex == kInvalidIndex) {
-      return false;
+      // If the texture doesn't exist yet, add it to the name resolver
+      tex = m_nameResolver->textures.resolve(textureName);
     }
     *dest = tex;
     return true;
@@ -4634,7 +4862,7 @@ namespace minipbrt {
     }
     uint32_t i = 0;
     for (Medium* medium : m_scene->mediums) {
-      if (medium->mediumName != nullptr && std::strcmp(name, medium->mediumName) == 0) {
+      if (medium != nullptr && medium->mediumName != nullptr && std::strcmp(name, medium->mediumName) == 0) {
         return i;
       }
       ++i;
@@ -4650,7 +4878,7 @@ namespace minipbrt {
     }
     uint32_t i = 0;
     for (Material* material : m_scene->materials) {
-      if (material->name != nullptr && std::strcmp(name, material->name) == 0) {
+      if (material!= nullptr && material->name != nullptr && std::strcmp(name, material->name) == 0) {
         return i;
       }
       ++i;
@@ -4666,7 +4894,7 @@ namespace minipbrt {
     }
     uint32_t i = 0;
     for (Texture* texture : m_scene->textures) {
-      if (texture->name != nullptr && std::strcmp(name, texture->name) == 0) {
+      if (texture != nullptr && texture->name != nullptr && std::strcmp(name, texture->name) == 0) {
         return i;
       }
       ++i;

@@ -4,21 +4,8 @@ TO DO
 Must have (parser is not correct without them)
 ----------------------------------------------
 
-Finish implementing:
-[x] `parse_material_common()`
-[x] `parse_ObjectBegin()`
-[x] `parse_ObjectEnd()`
-[x] `parse_ObjectInstance()`
-[x] `parse_Texture()`
-[x] `blackbody_to_rgb()`
-
 Set up any missing defaults after the scene has been parsed:
 * e.g. Camera params which depend on the Film settings
-
-Resolve references to named items:
-* PBRT allows items to be referenced by name before they're defined.
-* We currently just try to resolve the references as we encounter them, which
-  fails for some valid input files.
 
 Allow overriding of material params in Shape statements.
 

@@ -110,6 +110,8 @@ namespace minipbrt {
             err->line(),
             err->column(),
             err->message());
+    fprintf(stderr, "~~~~ buffer contents when the error occurred ~~~~\n");
+    fprintf(stderr, "%s\n", err->buffer_contents());
   }
 
 
@@ -525,20 +527,59 @@ namespace minipbrt {
 int main(int argc, char** argv)
 {
   if (argc <= 1) {
-    fprintf(stderr, "No input file provided.\n");
+    fprintf(stderr, "No input files provided.\n");
     return EXIT_SUCCESS;
   }
 
-  minipbrt::Parser parser;
-  bool ok = parser.parse(argv[1]);
-  if (!ok) {
-    minipbrt::print_error(parser.get_error());
-    return EXIT_FAILURE;
+  if (argc == 2) {
+    minipbrt::Parser parser;
+    bool ok = parser.parse(argv[1]);
+    if (!ok) {
+      minipbrt::print_error(parser.get_error());
+      return EXIT_FAILURE;
+    }
+    else {
+      minipbrt::Scene* scene = parser.take_scene();
+      minipbrt::print_scene_info(scene);
+      delete scene;
+      return EXIT_SUCCESS;
+    }
   }
   else {
-    minipbrt::Scene* scene = parser.take_scene();
-    minipbrt::print_scene_info(scene);
-    delete scene;
-    return EXIT_SUCCESS;
+    int width = 0;
+    for (int i = 1; i < argc; i++) {
+      if (argv[i][0] == '-') {
+        continue;
+      }
+      int newWidth = strlen(argv[i]);
+      if (newWidth > width) {
+        width = newWidth;
+      }
+    }
+
+    int numPassed = 0;
+    int numFailed = 0;
+    for (int i = 1; i < argc; i++) {
+      if (argv[i][0] == '-') {
+        continue;
+      }
+
+      minipbrt::Parser parser;
+      bool ok = parser.parse(argv[i]);
+      printf("%-*s  %s", width, argv[i], ok ? "passed" : "FAILED");
+      if (ok) {
+        printf("\n");
+        ++numPassed;
+      }
+      else {
+        const minipbrt::Error* err = parser.get_error();
+        printf(" ---> [%s, line %lld, column %lld] %s\n", err->filename(), err->line(), err->column(), err->message());
+        ++numFailed;
+      }
+      fflush(stdout);
+    }
+    printf("----\n");
+    printf("%d passed\n", numPassed);
+    printf("%d failed\n", numFailed);
   }
 }

@@ -101,6 +101,7 @@ namespace minipbrt {
   struct ParamTypeDeclaration;
   struct TransformStack;
   struct AttributeStack;
+  struct NameResolver;
 
   // Interfaces
   struct Accelerator;
@@ -1459,7 +1460,7 @@ namespace minipbrt {
   class Error {
   public:
     // Error takes a copy of `theFilename`, but takes ownership of `theMessage`.
-    Error(const char* theFilename, int64_t theOffset, const char* theMessage);
+    Error(const char* theFilename, int64_t theOffset, const char* theMessage, const char* bufPos, const char* bufEnd);
     ~Error();
 
     const char* filename() const;
@@ -1467,6 +1468,7 @@ namespace minipbrt {
     int64_t offset() const;
     int64_t line() const;
     int64_t column() const;
+    const char* buffer_contents() const;
 
     bool has_line_and_column() const;
     void set_line_and_column(int64_t theLine, int64_t theColumn);
@@ -1479,6 +1481,8 @@ namespace minipbrt {
     int64_t m_offset       = 0;       //!< Char offset within the file at which the error occurred.
     int64_t m_line         = 0;       //!< Line number the error occurred on. The first line in a file is 1, 0 indicates the line number hasn't been calculated yet.
     int64_t m_column       = 0;       //!< Column number the error occurred on. The first column is 1, 0 indicates the column number hasn't been calculated yet.
+
+    char m_bufContents[64];
   };
 
 
@@ -1530,6 +1534,7 @@ namespace minipbrt {
     bool which_type(uint32_t* index);
     bool match_symbol(const char* str);
     bool which_string_literal(const char* values[], int* index);
+    bool which_keyword(const char* values[], int* index);
 
     size_t token_length() const;
 
@@ -1705,6 +1710,9 @@ namespace minipbrt {
     // Temporary storage for the active object.
     std::vector<uint32_t> m_tempShapes;
     std::vector<uint32_t> m_tempInstances;
+
+    // Name resolution
+    NameResolver* m_nameResolver = nullptr;
   };
 
 } // namespace minipbrt

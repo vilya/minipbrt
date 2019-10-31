@@ -1236,13 +1236,13 @@ namespace minipbrt {
 
 
   struct Texture2D : public Texture {
-    TexCoordMapping mapping;
-    float uScale;
-    float vScale;
-    float uDelta;
-    float vDelta;
-    float v1[3];
-    float v2[3];
+    TexCoordMapping mapping = TexCoordMapping::UV;
+    float uscale            = 1.0f;
+    float vscale            = 1.0f;
+    float udelta            = 0.0f;
+    float vdelta            = 0.0f;
+    float v1[3]             = { 1.0f, 0.0f, 0.0f };
+    float v2[3]             = { 0.0f, 1.0f, 0.0f };
 
     virtual ~Texture2D() override {}
   };
@@ -1314,7 +1314,7 @@ namespace minipbrt {
   struct ImageMapTexture : public Texture2D {
     char* filename      = nullptr;
     WrapMode wrap       = WrapMode::Repeat;
-    float maxAnisotropy = 8.0f;
+    float maxanisotropy = 8.0f;
     bool trilinear      = false;
     float scale         = 1.0f;
     bool gamma          = false;

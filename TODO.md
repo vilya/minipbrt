@@ -9,7 +9,7 @@ Finish implementing:
 [x] `parse_ObjectBegin()` - not implemented yet
 [x] `parse_ObjectEnd()`	- not implemented yet
 [x] `parse_ObjectInstance()` - not implemented yet
-[ ] `parse_Texture()` - properties for each texture type
+[x] `parse_Texture()` - properties for each texture type
 [ ] `blackbody_to_rgb()` - not implemented yet
 
 Set up any missing defaults after the scene has been parsed:

@@ -114,6 +114,11 @@ namespace minipbrt {
   static const char* kLightSampleStrategies[] = { "uniform", "power", "spatial", nullptr };
   static const char* kDirectLightSampleStrategies[] = { "uniform", "power", "spatial", nullptr };
 
+  static const char* kTexCoordMappings[] = { "uv", "spherical", "cylindrical", "planar", nullptr };
+  static const char* kCheckerboardAAModes[] = { "closedform", "none", nullptr };
+  static const char* kWrapModes[] = { "repeat", "black", "clamp", nullptr };
+
+
   static const StatementDeclaration kStatements[] = {
     // Common statements, can appear in both preamble and world section.
     { StatementID::Identity,          "Identity",            "",                 true,  true,  nullptr,                nullptr       },
@@ -3412,6 +3417,10 @@ namespace minipbrt {
     case TextureType::Bilerp:
       {
         BilerpTexture* bilerp = new BilerpTexture();
+        color_texture_param("v00", &bilerp->v00);
+        color_texture_param("v01", &bilerp->v01);
+        color_texture_param("v10", &bilerp->v10);
+        color_texture_param("v11", &bilerp->v11);
         texture = bilerp;
       }
       break;
@@ -3419,6 +3428,9 @@ namespace minipbrt {
     case TextureType::Checkerboard2D:
       {
         Checkerboard2DTexture* checkerboard2d = new Checkerboard2DTexture();
+        color_texture_param("tex1", &checkerboard2d->tex1);
+        color_texture_param("tex2", &checkerboard2d->tex2);
+        typed_enum_param("aamode", kCheckerboardAAModes, &checkerboard2d->aamode);
         texture = checkerboard2d;
       }
       break;
@@ -3426,6 +3438,8 @@ namespace minipbrt {
     case TextureType::Checkerboard3D:
       {
         Checkerboard3DTexture* checkerboard3d = new Checkerboard3DTexture();
+        color_texture_param("tex1", &checkerboard3d->tex1);
+        color_texture_param("tex2", &checkerboard3d->tex2);
         texture = checkerboard3d;
       }
       break;
@@ -3433,6 +3447,7 @@ namespace minipbrt {
     case TextureType::Constant:
       {
         ConstantTexture* constant = new ConstantTexture();
+        spectrum_param("value", constant->value);
         texture = constant;
       }
       break;
@@ -3440,6 +3455,8 @@ namespace minipbrt {
     case TextureType::Dots:
       {
         DotsTexture* dots = new DotsTexture();
+        color_texture_param("inside",  &dots->inside);
+        color_texture_param("outside", &dots->outside);
         texture = dots;
       }
       break;
@@ -3447,6 +3464,8 @@ namespace minipbrt {
     case TextureType::FBM:
       {
         FBMTexture* fbm = new FBMTexture();
+        int_param("octaves",     &fbm->octaves);
+        float_param("roughness", &fbm->roughness);
         texture = fbm;
       }
       break;
@@ -3454,6 +3473,16 @@ namespace minipbrt {
     case TextureType::ImageMap:
       {
         ImageMapTexture* imagemap = new ImageMapTexture();
+        if (!string_param("filename", &imagemap->filename, true)) {
+          m_tokenizer.set_error("Required parameter \"filename\" is missing");
+          delete imagemap;
+          return false;
+        }
+        typed_enum_param("wrap", kWrapModes, &imagemap->wrap);
+        float_param("maxanisotropy", &imagemap->maxanisotropy);
+        bool_param("trilinear",      &imagemap->trilinear);
+        float_param("scale",         &imagemap->scale);
+        bool_param("gamma",          &imagemap->gamma);
         texture = imagemap;
       }
       break;
@@ -3461,6 +3490,10 @@ namespace minipbrt {
     case TextureType::Marble:
       {
         MarbleTexture* marble = new MarbleTexture();
+        int_param("octaves",     &marble->octaves);
+        float_param("roughness", &marble->roughness);
+        float_param("scale",     &marble->scale);
+        float_param("variation", &marble->variation);
         texture = marble;
       }
       break;
@@ -3468,6 +3501,9 @@ namespace minipbrt {
     case TextureType::Mix:
       {
         MixTexture* mix = new MixTexture();
+        color_texture_param("tex1", &mix->tex1);
+        color_texture_param("tex2", &mix->tex2);
+        float_texture_param("amount", &mix->amount);
         texture = mix;
       }
       break;
@@ -3475,6 +3511,8 @@ namespace minipbrt {
     case TextureType::Scale:
       {
         ScaleTexture* scale = new ScaleTexture();
+        color_texture_param("tex1", &scale->tex1);
+        color_texture_param("tex2", &scale->tex2);
         texture = scale;
       }
       break;
@@ -3482,6 +3520,7 @@ namespace minipbrt {
     case TextureType::UV:
       {
         UVTexture* uv = new UVTexture();
+        // Not sure...?
         texture = uv;
       }
       break;
@@ -3489,6 +3528,7 @@ namespace minipbrt {
     case TextureType::Windy:
       {
         WindyTexture* windy = new WindyTexture();
+        // Not sure...?
         texture = windy;
       }
       break;
@@ -3496,6 +3536,8 @@ namespace minipbrt {
     case TextureType::Wrinkled:
       {
         WrinkledTexture* wrinkled = new WrinkledTexture();
+        int_param("octaves",     &wrinkled->octaves);
+        float_param("roughness", &wrinkled->roughness);
         texture = wrinkled;
       }
       break;
@@ -3517,6 +3559,22 @@ namespace minipbrt {
     if (texture == nullptr) {
       m_tokenizer.set_error("Failed to create %s texture", kTextureTypes[uint32_t(textureType)]);
       return false;
+    }
+
+    Texture2D* tex2d = dynamic_cast<Texture2D*>(texture);
+    if (tex2d != nullptr) {
+      typed_enum_param("mapping", kTexCoordMappings, &tex2d->mapping);
+      float_param("uscale", &tex2d->uscale);
+      float_param("vscale", &tex2d->vscale);
+      float_param("udelta", &tex2d->udelta);
+      float_param("vdelta", &tex2d->vdelta);
+      float_array_param("v1", ParamType::Vector3, 3, tex2d->v1);
+      float_array_param("v2", ParamType::Vector3, 3, tex2d->v2);
+    }
+
+    Texture3D* tex3d = dynamic_cast<Texture3D*>(texture);
+    if (tex3d != nullptr) {
+      save_current_transform_matrices(&tex3d->objectToTexture);
     }
 
     texture->name = copy_string(string_arg(0));

@@ -100,7 +100,7 @@ namespace minipbrt {
   static const char* kShapeTypes[] = { "cone", "curve", "cylinder", "disk", "hyperboloid", "paraboloid", "sphere", "trianglemesh", "heightfield", "loopsubdiv", "nurbs", "plymesh", nullptr };
   static const char* kAreaLightTypes[] = { "diffuse", nullptr };
   static const char* kLightTypes[] = { "distant", "goniometric", "infinite", "point", "projection", "spot", nullptr };
-  static const char* kMaterialTypes[] = { "disney", "fourier", "glass", "hair", "kdSubsurface", "matte", "metal", "mirror", "mix", "none", "plastic", "substrate", "subsurface", "translucent", "uber", nullptr };
+  static const char* kMaterialTypes[] = { "disney", "fourier", "glass", "hair", "kdsubsurface", "matte", "metal", "mirror", "mix", "none", "plastic", "substrate", "subsurface", "translucent", "uber", nullptr };
   static const char* kTextureDataTypes[] = { "float", "spectrum", "color", nullptr };
   static const char* kTextureTypes[] = { "bilerp", "checkerboard", "constant", "dots", "fbm", "imagemap", "marble", "mix", "scale", "uv", "windy", "wrinkled", "ptex", nullptr };
   static const char* kAccelTypes[] = { "bvh", "kdtree", nullptr };
@@ -111,6 +111,8 @@ namespace minipbrt {
   static const char* kSamplerTypes[] = { "02sequence", "lowdiscrepancy", "halton", "maxmindist", "random", "sobol", "stratified", nullptr };
   static const char* kMediumTypes[] = { "homogeneous", "heterogeneous", nullptr };
 
+  static const char* kLightSampleStrategies[] = { "uniform", "power", "spatial", nullptr };
+  static const char* kDirectLightSampleStrategies[] = { "uniform", "power", "spatial", nullptr };
 
   static const StatementDeclaration kStatements[] = {
     // Common statements, can appear in both preamble and world section.
@@ -642,6 +644,7 @@ namespace minipbrt {
     std::unordered_map<std::string, Mat4*> coordinateSystems;
 
     TransformStack();
+    ~TransformStack();
 
     bool push();
     bool pop();
@@ -1221,6 +1224,14 @@ namespace minipbrt {
   }
 
 
+  TransformStack::~TransformStack()
+  {
+    for (auto& entry : coordinateSystems) {
+      delete[] entry.second;
+    }
+  }
+
+
   bool TransformStack::push()
   {
     if (entry == kMaxTransformStackEntry) {
@@ -1534,12 +1545,7 @@ namespace minipbrt {
       delete[] m_fileData[i].filename;
     }
     delete m_fileData;
-
-//    if (m_f) {
-//      fclose(m_f);
-//    }
     delete[] m_buf;
-//    delete[] m_filename;
     delete m_error;
   }
 
@@ -1606,9 +1612,6 @@ namespace minipbrt {
 
     m_pos = m_end;
 
-    // FIXME: If we're in a line comment when we reach the end of the
-    // current buffer, we come out of the "in line comment" state prematurely.
-
     bool skipLine = false;
     while (true) {
       if (skipLine) {
@@ -1617,7 +1620,6 @@ namespace minipbrt {
           ++m_pos;
         }
         if (*m_pos == '\n') {
-//          ++m_pos;
           skipLine = false;
           continue;
         }
@@ -1633,19 +1635,6 @@ namespace minipbrt {
           continue;
         }
       }
-
-//      // Skip whitespace.
-//      while (is_whitespace(*m_pos) || *m_pos == '\n') {
-//        ++m_pos;
-//      }
-
-//      // Skip over a line comment.
-//      if (*m_pos == '#') {
-//        do {
-//          ++m_pos;
-//        } while (m_pos < m_bufEnd && *m_pos != '\n');
-//        continue;
-//      }
 
       // If we're at the end of the current buffer, try to load some more. If
       // that's successful, then continue advancing. Otherwise we're at the
@@ -1677,7 +1666,6 @@ namespace minipbrt {
   {
     FileData* fdata = &m_fileData[m_includeDepth];
     if (fdata->atEOF) {
-//      fprintf(stderr, "EOF in %s\n", fdata->filename);
       if (m_includeDepth == 0 || fdata->reportEOF) {
         return false;
       }
@@ -1746,8 +1734,6 @@ namespace minipbrt {
       set_error("Failed to include %s, full path = %s", filename, realname);
       return false;
     }
-
-    fprintf(stderr, "Include \"%s\"\n", realname);
 
     // Adjust the current file pointer so it will be correct after the file we're about to push is popped.
     m_fileData[m_includeDepth].bufOffset += static_cast<int64_t>(m_end - m_buf);
@@ -2066,34 +2052,6 @@ namespace minipbrt {
     return true;
   }
 
-
-//  bool Tokenizer::match_keyword(const char* str)
-//  {
-//    assert(str != nullptr);
-
-//    m_end = m_pos;
-//    while (*m_end == *str && *str != '\0') {
-//      ++m_end;
-//      ++str;
-//    }
-//    return (*str == '\0' && !is_keyword_part(*m_end));
-//  }
-
-
-//  bool Tokenizer::which_keyword(const char* keywords[], int* index)
-//  {
-//    assert(keywords != nullptr);
-
-//    for (int i = 0; keywords[i] != nullptr; i++) {
-//      if (match_keyword(keywords[i])) {
-//        if (index != nullptr) {
-//          *index = i;
-//        }
-//        return true;
-//      }
-//    }
-//    return false;
-//  }
 
   bool Tokenizer::which_directive(uint32_t *index)
   {
@@ -2635,8 +2593,8 @@ namespace minipbrt {
     }
 
     // Common params for all types.
-    spectrum_param_as_rgb("sigma_a", medium->sigma_a);
-    spectrum_param_as_rgb("sigma_s", medium->sigma_s);
+    spectrum_param("sigma_a", medium->sigma_a);
+    spectrum_param("sigma_s", medium->sigma_s);
     string_param("preset", &medium->preset, true);
     float_param("g", &medium->g);
     float_param("scale", &medium->scale);
@@ -3004,7 +2962,7 @@ namespace minipbrt {
     AreaLight* areaLight = nullptr;
     if (areaLightType == AreaLightType::Diffuse) {
       DiffuseAreaLight* diffuse = new DiffuseAreaLight();
-      spectrum_param_as_rgb("L", diffuse->L);
+      spectrum_param("L", diffuse->L);
       bool_param("twosided", &diffuse->twosided);
       int_param("samples", &diffuse->samples);
       areaLight = diffuse;
@@ -3016,7 +2974,7 @@ namespace minipbrt {
     }
 
     // Params common to all area lights.
-    spectrum_param_as_rgb("scale", areaLight->scale);
+    spectrum_param("scale", areaLight->scale);
 
     m_attrs->top->areaLight = static_cast<uint32_t>(m_scene->areaLights.size());
     m_scene->areaLights.push_back(areaLight);
@@ -3034,7 +2992,7 @@ namespace minipbrt {
     case LightType::Distant: // distant
       {
         DistantLight* distant = new DistantLight();
-        spectrum_param_as_rgb("L", distant->L);
+        spectrum_param("L", distant->L);
         float_array_param("from", ParamType::Point3, 3, distant->from);
         float_array_param("to", ParamType::Point3, 3, distant->to);
         light = distant;
@@ -3044,7 +3002,7 @@ namespace minipbrt {
     case LightType::Goniometric: // goniometric
       {
         GoniometricLight* goniometric = new GoniometricLight();
-        spectrum_param_as_rgb("I", goniometric->I);
+        spectrum_param("I", goniometric->I);
         if (!string_param("mapname", &goniometric->mapname, true)) {
           m_tokenizer.set_error("Required parameter \"mapname\" is missing");
           delete goniometric;
@@ -3057,7 +3015,7 @@ namespace minipbrt {
     case LightType::Infinite: // infinite
       {
         InfiniteLight* infinite = new InfiniteLight();
-        spectrum_param_as_rgb("L", infinite->L);
+        spectrum_param("L", infinite->L);
         int_param("samples", &infinite->samples);
         string_param("mapname", &infinite->mapname, true);
         light = infinite;
@@ -3067,7 +3025,7 @@ namespace minipbrt {
     case LightType::Point: // point
       {
         PointLight* point = new PointLight();
-        spectrum_param_as_rgb("I", point->I);
+        spectrum_param("I", point->I);
         float_array_param("from", ParamType::Point3, 3, point->from);
         light = point;
       }
@@ -3076,7 +3034,7 @@ namespace minipbrt {
     case LightType::Projection: // projection
       {
         ProjectionLight* projection = new ProjectionLight();
-        spectrum_param_as_rgb("I", projection->I);
+        spectrum_param("I", projection->I);
         float_param("fov", &projection->fov);
         if (!string_param("mapname", &projection->mapname, true)) {
           m_tokenizer.set_error("Required parameter \"mapname\" is missing");
@@ -3090,7 +3048,7 @@ namespace minipbrt {
     case LightType::Spot: // spot
       {
         SpotLight* spot = new SpotLight();
-        spectrum_param_as_rgb("I", spot->I);
+        spectrum_param("I", spot->I);
         float_array_param("from", ParamType::Point3, 3, spot->from);
         float_array_param("to", ParamType::Point3, 3, spot->to);
         float_param("coneangle", &spot->coneangle);
@@ -3106,7 +3064,7 @@ namespace minipbrt {
     }
 
     save_current_transform_matrices(&light->lightToWorld);
-    spectrum_param_as_rgb("scale", light->scale);
+    spectrum_param("scale", light->scale);
     m_scene->lights.push_back(light);
     return true;
   }
@@ -3149,7 +3107,21 @@ namespace minipbrt {
     case MaterialType::Disney:
       {
         DisneyMaterial* disney = new DisneyMaterial();
-        // TODO
+        color_texture_param("color",           &disney->color);
+        float_texture_param("anisotropic",     &disney->anisotropic);
+        float_texture_param("clearcoat",       &disney->clearcoat);
+        float_texture_param("clearcoatgloss",  &disney->clearcoatgloss);
+        float_texture_param("eta",             &disney->eta);
+        float_texture_param("metallic",        &disney->metallic);
+        float_texture_param("roughness",       &disney->roughness);
+        color_texture_param("scatterdistance", &disney->scatterdistance);
+        float_texture_param("sheen",           &disney->sheen);
+        float_texture_param("sheentint",       &disney->sheentint);
+        float_texture_param("spectrans",       &disney->spectrans);
+        float_texture_param("speculartint",    &disney->speculartint);
+        bool_param("thin", &disney->thin);
+        color_texture_param("difftrans",       &disney->difftrans);
+        color_texture_param("flatness",        &disney->flatness);
         material = disney;
       }
       break;
@@ -3157,7 +3129,10 @@ namespace minipbrt {
     case MaterialType::Fourier:
       {
         FourierMaterial* fourier = new FourierMaterial();
-        // TODO
+        if (!string_param("bsdffile", &fourier->bsdffile, true)) {
+          m_tokenizer.set_error("Required parameter \"bsdffile\" is missing or invalid");
+          return false;
+        }
         material = fourier;
       }
       break;
@@ -3165,7 +3140,12 @@ namespace minipbrt {
     case MaterialType::Glass:
       {
         GlassMaterial* glass = new GlassMaterial();
-        // TODO
+        color_texture_param("Kr",         &glass->Kr);
+        color_texture_param("Kt",         &glass->Kt);
+        float_texture_param("eta",        &glass->eta);
+        float_texture_param("uroughness", &glass->uroughness);
+        float_texture_param("vroughness", &glass->vroughness);
+        bool_param("remaproughness",      &glass->remaproughness);
         material = glass;
       }
       break;
@@ -3173,7 +3153,14 @@ namespace minipbrt {
     case MaterialType::Hair:
       {
         HairMaterial* hair = new HairMaterial();
-        // TODO
+        hair->has_sigma_a = color_texture_param("sigma_a", &hair->sigma_a);
+        hair->has_color   = color_texture_param("color",   &hair->color);
+        float_texture_param("eumelanin",   &hair->eumelanin);
+        float_texture_param("pheomelanin", &hair->pheomelanin);
+        float_texture_param("eta",         &hair->eta);
+        float_texture_param("beta_m",      &hair->beta_m);
+        float_texture_param("beta_n",      &hair->beta_n);
+        float_texture_param("alpha",       &hair->alpha);
         material = hair;
       }
       break;
@@ -3181,7 +3168,14 @@ namespace minipbrt {
     case MaterialType::KdSubsurface:
       {
         KdSubsurfaceMaterial* kdsubsurface = new KdSubsurfaceMaterial();
-        // TODO
+        color_texture_param("Kd",         &kdsubsurface->Kd);
+        color_texture_param("mfp",        &kdsubsurface->mfp);
+        float_texture_param("eta",        &kdsubsurface->eta);
+        color_texture_param("Kr",         &kdsubsurface->Kr);
+        color_texture_param("Kt",         &kdsubsurface->Kt);
+        float_texture_param("uroughness", &kdsubsurface->uroughness);
+        float_texture_param("vroughness", &kdsubsurface->vroughness);
+        bool_param("remaproughness",      &kdsubsurface->remaproughness);
         material = kdsubsurface;
       }
       break;
@@ -3189,7 +3183,8 @@ namespace minipbrt {
     case MaterialType::Matte:
       {
         MatteMaterial* matte = new MatteMaterial();
-        // TODO
+        color_texture_param("Kd",    &matte->Kd);
+        float_texture_param("sigma", &matte->sigma);
         material = matte;
       }
       break;
@@ -3197,7 +3192,11 @@ namespace minipbrt {
     case MaterialType::Metal:
       {
         MetalMaterial* metal = new MetalMaterial();
-        // TODO
+        color_texture_param("eta",        &metal->eta);
+        color_texture_param("k",          &metal->k);
+        float_texture_param("uroughness", &metal->uroughness);
+        float_texture_param("vroughness", &metal->vroughness);
+        bool_param("remaproughness",      &metal->remaproughness);
         material = metal;
       }
       break;
@@ -3205,31 +3204,42 @@ namespace minipbrt {
     case MaterialType::Mirror:
       {
         MirrorMaterial* mirror = new MirrorMaterial();
-        // TODO
+        color_texture_param("Kr", &mirror->Kr);
         material = mirror;
       }
       break;
 
     case MaterialType::Mix:
       {
+        char* tmp = nullptr;
         MixMaterial* mix = new MixMaterial();
-        // TODO
+        color_texture_param("amount", &mix->amount);
+        if (string_param("namedmaterial1", &tmp)) {
+          mix->namedmaterial1 = find_material(tmp);
+        }
+        if (string_param("namedmaterial2", &tmp)) {
+          mix->namedmaterial2 = find_material(tmp);
+        }
+        if (mix->namedmaterial1 == kInvalidIndex || mix->namedmaterial2 == kInvalidIndex) {
+          m_tokenizer.set_error("One or both materials to be mixed are missing");
+          delete mix;
+          return false;
+        }
         material = mix;
       }
       break;
 
     case MaterialType::None:
-      {
-        NoneMaterial* none = new NoneMaterial();
-        // TODO
-        material = none;
-      }
+      material = new NoneMaterial();
       break;
 
     case MaterialType::Plastic:
       {
         PlasticMaterial* plastic = new PlasticMaterial();
-        // TODO
+        color_texture_param("Kd",        &plastic->Kd);
+        color_texture_param("Ks",        &plastic->Ks);
+        float_texture_param("roughness", &plastic->roughness);
+        bool_param("remaproughness",     &plastic->remaproughness);
         material = plastic;
       }
       break;
@@ -3237,7 +3247,11 @@ namespace minipbrt {
     case MaterialType::Substrate:
       {
         SubstrateMaterial* substrate = new SubstrateMaterial();
-        // TODO
+        color_texture_param("Kd",         &substrate->Kd);
+        color_texture_param("Ks",         &substrate->Ks);
+        float_texture_param("uroughness", &substrate->uroughness);
+        float_texture_param("vroughness", &substrate->vroughness);
+        bool_param("remaproughness",      &substrate->remaproughness);
         material = substrate;
       }
       break;
@@ -3245,7 +3259,16 @@ namespace minipbrt {
     case MaterialType::Subsurface:
       {
         SubsurfaceMaterial* subsurface = new SubsurfaceMaterial();
-        // TODO
+        string_param("name",                 &subsurface->coefficients, true);
+        color_texture_param("sigma_a",       &subsurface->sigma_a);
+        color_texture_param("sigma_prime_s", &subsurface->sigma_prime_s);
+        float_param("scale",                 &subsurface->scale);
+        float_texture_param("eta",           &subsurface->eta);
+        color_texture_param("Kr",            &subsurface->Kr);
+        color_texture_param("Kt",            &subsurface->Kt);
+        float_texture_param("uroughness",    &subsurface->uroughness);
+        float_texture_param("vroughness",    &subsurface->vroughness);
+        bool_param("remaproughness",         &subsurface->remaproughness);
         material = subsurface;
       }
       break;
@@ -3253,7 +3276,12 @@ namespace minipbrt {
     case MaterialType::Translucent:
       {
         TranslucentMaterial* translucent = new TranslucentMaterial();
-        // TODO
+        color_texture_param("Kd",        &translucent->Kd);
+        color_texture_param("Ks",        &translucent->Ks);
+        color_texture_param("reflect",   &translucent->reflect);
+        color_texture_param("transmit",  &translucent->transmit);
+        float_texture_param("roughness", &translucent->roughness);
+        bool_param("remaproughness",     &translucent->remaproughness);
         material = translucent;
       }
       break;
@@ -3261,7 +3289,15 @@ namespace minipbrt {
     case MaterialType::Uber:
       {
         UberMaterial* uber = new UberMaterial();
-        // TODO
+        color_texture_param("Kd",         &uber->Kd);
+        color_texture_param("Ks",         &uber->Ks);
+        color_texture_param("reflect",    &uber->Kr);
+        color_texture_param("transmit",   &uber->Kt);
+        float_texture_param("eta",        &uber->eta);
+        color_texture_param("opacity",    &uber->opacity);
+        float_texture_param("uroughness", &uber->uroughness);
+        float_texture_param("vroughness", &uber->vroughness);
+        bool_param("remaproughness",      &uber->remaproughness);
         material = uber;
       }
       break;
@@ -3271,6 +3307,8 @@ namespace minipbrt {
       m_tokenizer.set_error("Failed to create material");
       return false;
     }
+
+    texture_param("bumpmap", &material->bumpmap);
 
     material->name = copy_string(materialName);
     if (materialOut != nullptr) {
@@ -3285,7 +3323,7 @@ namespace minipbrt {
   {
     const char* name = string_arg(0);
     uint32_t material = find_material(name);
-//    if (mat == nullptr) {
+//    if (mat == kInvalidIndex) {
 //      m_tokenizer.set_error("Couldn't find any material named '%s'", name);
 //      return false;
 //    }
@@ -3657,11 +3695,10 @@ namespace minipbrt {
     switch (integratorType) {
     case IntegratorType::BDPT: // bdpt
       {
-        const char* lightSampleStrategies[] = { "uniform", "power", "spatial", nullptr };
         BDPTIntegrator* bdpt = new BDPTIntegrator();
         int_param("maxdepth", &bdpt->maxdepth);
         int_array_param("pixelbounds", 4, bdpt->pixelbounds);
-        typed_enum_param("lightsamplestrategy", lightSampleStrategies, &bdpt->lightsamplestrategy);
+        typed_enum_param("lightsamplestrategy", kLightSampleStrategies, &bdpt->lightsamplestrategy);
         bool_param("visualizeweights", &bdpt->visualizeweights);
         bool_param("visualizestrategies", &bdpt->visualizestrategies);
         integrator = bdpt;
@@ -3670,11 +3707,10 @@ namespace minipbrt {
 
     case IntegratorType::DirectLighting: // directlighting
       {
-        const char* strategies[] = { "uniform", "power", "spatial", nullptr };
         DirectLightingIntegrator* direct = new DirectLightingIntegrator();
         int_param("maxdepth", &direct->maxdepth);
         int_array_param("pixelbounds", 4, direct->pixelbounds);
-        typed_enum_param("strategy", strategies, &direct->strategy);
+        typed_enum_param("strategy", kDirectLightSampleStrategies, &direct->strategy);
         integrator = direct;
       }
       break;
@@ -3694,12 +3730,11 @@ namespace minipbrt {
 
     case IntegratorType::Path: // path
       {
-        const char* lightSampleStrategies[] = { "uniform", "power", "spatial", nullptr };
         PathIntegrator* path = new PathIntegrator();
         int_param("maxdepth", &path->maxdepth);
         int_array_param("pixelbounds", 4, path->pixelbounds);
         float_param("rrthreshold", &path->rrthreshold);
-        typed_enum_param("lightsamplestrategy", lightSampleStrategies, &path->lightsamplestrategy);
+        typed_enum_param("lightsamplestrategy", kLightSampleStrategies, &path->lightsamplestrategy);
         integrator = path;
       }
       break;
@@ -4371,7 +4406,7 @@ namespace minipbrt {
   }
 
 
-  bool Parser::spectrum_param_as_rgb(const char* name, float dest[3])
+  bool Parser::spectrum_param(const char* name, float dest[3])
   {
     assert(name != nullptr);
     assert(dest != nullptr);
@@ -4441,6 +4476,22 @@ namespace minipbrt {
     }
     *dest = tex;
     return true;
+  }
+
+
+  bool Parser::float_texture_param(const char* name, FloatTex* dest)
+  {
+    bool hasTex = texture_param(name, &dest->texture);
+    bool hasValue = float_param(name, &dest->value);
+    return hasTex | hasValue;
+  }
+
+
+  bool Parser::color_texture_param(const char *name, ColorTex *dest)
+  {
+    bool hasTex = texture_param(name, &dest->texture);
+    bool hasValue = spectrum_param(name, dest->value);
+    return hasTex | hasValue;
   }
 
 

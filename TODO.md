@@ -5,7 +5,7 @@ Must have (parser is not correct without them)
 ----------------------------------------------
 
 Finish implementing:
-[ ] `parse_material_common()` - properties for each material type
+[x] `parse_material_common()` - properties for each material type
 [x] `parse_ObjectBegin()` - not implemented yet
 [x] `parse_ObjectEnd()`	- not implemented yet
 [x] `parse_ObjectInstance()` - not implemented yet
@@ -61,8 +61,6 @@ Factor out checks for required params into a function.
 
 `pbrtinfo` example
 * Rename main.cpp to pbrtinfo.cpp & move into an `examples` directory.
-* Finish implementing existing `print_xxx` functions.
-* Print out more detailed info about world data
 
 Code clean-up:
 * Merge the tokenizer class into the parser class.

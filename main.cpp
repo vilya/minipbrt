@@ -22,7 +22,13 @@ namespace minipbrt {
   static void print_integrator(const Integrator* integrator);
   static void print_sampler(const Sampler* sampler);
 
+  static void print_world_summary(const Scene* scene);
   static void print_shapes_summary(const Scene* scene);
+  static void print_lights_summary(const Scene* scene);
+  static void print_area_lights_summary(const Scene* scene);
+  static void print_materials_summary(const Scene* scene);
+  static void print_textures_summary(const Scene* scene);
+  static void print_mediums_summary(const Scene* scene);
 
 
   //
@@ -33,6 +39,58 @@ namespace minipbrt {
   const char* lookup(const char* values[], T enumVal)
   {
     return values[static_cast<uint32_t>(enumVal)];
+  }
+
+
+  static uint32_t num_digits(uint32_t n)
+  {
+    uint32_t numDigits = 0;
+    do {
+      n /= 10;
+      ++numDigits;
+    } while (n > 0);
+    return numDigits;
+  }
+
+
+  template <class T>
+  static void histogram_by_type(const std::vector<T*>& values, uint32_t n, uint32_t histogram[])
+  {
+    for (uint32_t i = 0; i < n; i++) {
+      histogram[i] = 0;
+    }
+    for (const T* value : values) {
+      histogram[static_cast<uint32_t>(value->type())]++;
+    }
+  }
+
+
+  static void print_histogram(uint32_t n, const uint32_t histogram[], const char* names[])
+  {
+    uint32_t maxDigits = 1;
+    for (uint32_t i = 0; i < n; i++) {
+      uint32_t numDigits = num_digits(histogram[i]);
+      if (numDigits > maxDigits) {
+        maxDigits = numDigits;
+      }
+    }
+
+    for (uint32_t i = 0; i < n; i++) {
+      if (histogram[i] > 0) {
+        printf("%*u %s\n", maxDigits, histogram[i], names[i]);
+      }
+    }
+
+    printf("\n");
+  }
+
+
+  template <class T, uint32_t N>
+  static void print_histogram_by_type(const std::vector<T*>& values, const char* names[])
+  {
+    uint32_t histogram[N];
+    histogram_by_type(values, N, histogram);
+    print_histogram(N, histogram, names);
   }
 
 
@@ -79,25 +137,21 @@ namespace minipbrt {
       printf("Outside medium is \"%s\"\n", scene->outsideMedium->mediumName);
     }
 
-    printf("==== World Summary ====\n");
-    printf("%10u shapes\n",       uint32_t(scene->shapes.size()));
-    printf("%10u objects\n",      uint32_t(scene->objects.size()));
-    printf("%10u instances\n",    uint32_t(scene->instances.size()));
-    printf("%10u lights\n",       uint32_t(scene->lights.size()));
-    printf("%10u area lights\n",  uint32_t(scene->areaLights.size()));
-    printf("%10u materials\n",    uint32_t(scene->materials.size()));
-    printf("%10u textures\n",     uint32_t(scene->textures.size()));
-    printf("%10u mediums\n",      uint32_t(scene->mediums.size()));
+    print_world_summary(scene);
 
     print_shapes_summary(scene);
+    print_lights_summary(scene);
+    print_area_lights_summary(scene);
+    print_materials_summary(scene);
+    print_textures_summary(scene);
+    print_mediums_summary(scene);
   }
 
 
   static void print_accelerator(const Accelerator* accel)
   {
     const char* accelTypes[] = { "bvh", "kdtree" };
-    printf("==== Accelerator ====\n");
-    printf("Type: %s\n", lookup(accelTypes, accel->type()));
+    printf("==== Accelerator [%s] ====\n", lookup(accelTypes, accel->type()));
     switch (accel->type()) {
     case AcceleratorType::BVH:
       {
@@ -125,8 +179,7 @@ namespace minipbrt {
   static void print_camera(const Camera* camera)
   {
     const char* cameraTypes[] = { "perspective", "orthographic", "environment", "realistic" };
-    printf("==== Camera ====\n");
-    printf("Type: %s\n", lookup(cameraTypes, camera->type()));
+    printf("==== Camera [%s] ====\n", lookup(cameraTypes, camera->type()));
     printf("shutteropen      = %f\n", camera->shutteropen);
     printf("shutterclose     = %f\n", camera->shutterclose);
     switch (camera->type()) {
@@ -174,8 +227,7 @@ namespace minipbrt {
   static void print_film(const Film* film)
   {
     const char* filmTypes[] = { "image" };
-    printf("==== Film ====\n");
-    printf("Type: %s\n", lookup(filmTypes, film->type()));
+    printf("==== Film [%s] ====\n", lookup(filmTypes, film->type()));
     switch(film->type()) {
     case FilmType::Image:
       {
@@ -198,8 +250,7 @@ namespace minipbrt {
   static void print_filter(const Filter* filter)
   {
     const char* filterTypes[] = { "box", "gaussian", "mitchell", "sinc", "triangle" };
-    printf("==== Filter ====\n");
-    printf("Type: %s\n", lookup(filterTypes, filter->type()));
+    printf("==== Filter [%s] ====\n", lookup(filterTypes, filter->type()));
     printf("xwidth = %f\n", filter->xwidth);
     printf("ywidth = %f\n", filter->ywidth);
     switch (filter->type()) {
@@ -233,38 +284,239 @@ namespace minipbrt {
 
   static void print_integrator(const Integrator* integrator)
   {
-    printf("==== Integrator ====\n");
-    // TODO
+    static const char* integratorTypes[] = { "bdpt", "directlighting", "mlt", "path", "sppm", "whitted", "volpath", "ambientocclusion", nullptr };
+    static const char* lightSampleStrategies[] = { "uniform", "power", "spatial", nullptr };
+    static const char* directLightSampleStrategies[] = { "uniform", "power", "spatial", nullptr };
+
+    printf("==== Integrator [%s] ====\n", lookup(integratorTypes, integrator->type()));
+    switch (integrator->type()) {
+    case IntegratorType::BDPT:
+      {
+        const BDPTIntegrator* typed = dynamic_cast<const BDPTIntegrator*>(integrator);
+        printf("maxdepth            = %d\n", typed->maxdepth);
+        printf("pixelbounds         = [ %d, %d, %d, %d ]\n", typed->pixelbounds[0], typed->pixelbounds[1], typed->pixelbounds[2], typed->pixelbounds[3]);
+        printf("lightsamplestrategy = %s\n", lookup(lightSampleStrategies, typed->lightsamplestrategy));
+        printf("visualizestrategies = %s\n", typed->visualizestrategies ? "true" : "false");
+        printf("visualizeweights    = %s\n", typed->visualizeweights ? "true" : "false");
+      }
+      break;
+    case IntegratorType::DirectLighting:
+      {
+        const DirectLightingIntegrator* typed = dynamic_cast<const DirectLightingIntegrator*>(integrator);
+        printf("strategy    = %s\n", lookup(directLightSampleStrategies, typed->strategy));
+        printf("maxdepth    = %d\n", typed->maxdepth);
+        printf("pixelbounds = [ %d, %d, %d, %d ]\n", typed->pixelbounds[0], typed->pixelbounds[1], typed->pixelbounds[2], typed->pixelbounds[3]);
+      }
+      break;
+    case IntegratorType::MLT:
+      {
+        const MLTIntegrator* typed = dynamic_cast<const MLTIntegrator*>(integrator);
+        printf("maxdepth           = %d\n", typed->maxdepth);
+        printf("bootstrapsamples   = %d\n", typed->bootstrapsamples);
+        printf("chains             = %d\n", typed->chains);
+        printf("mutationsperpixel  = %d\n", typed->mutationsperpixel);
+        printf("largestprobability = %f\n", typed->largestprobability);
+        printf("sigma              = %f\n", typed->sigma);
+      }
+      break;
+    case IntegratorType::Path:
+      {
+        const PathIntegrator* typed = dynamic_cast<const PathIntegrator*>(integrator);
+        printf("maxdepth            = %d\n", typed->maxdepth);
+        printf("pixelbounds         = [ %d, %d, %d, %d ]\n", typed->pixelbounds[0], typed->pixelbounds[1], typed->pixelbounds[2], typed->pixelbounds[3]);
+        printf("rrthreshold         = %f\n", typed->rrthreshold);
+        printf("lightsamplestrategy = %s\n", lookup(lightSampleStrategies, typed->lightsamplestrategy));
+      }
+      break;
+    case IntegratorType::SPPM:
+      {
+        const SPPMIntegrator* typed = dynamic_cast<const SPPMIntegrator*>(integrator);
+        printf("maxdepth           = %d\n", typed->maxdepth);
+        printf("maxiterations       = %d\n", typed->maxiterations);
+        printf("photonsperiteration = %d\n", typed->photonsperiteration);
+        printf("imagewritefrequency = %d\n", typed->imagewritefrequency);
+        printf("radius              = %f\n", typed->radius);
+      }
+      break;
+    case IntegratorType::Whitted:
+      {
+        const WhittedIntegrator* typed = dynamic_cast<const WhittedIntegrator*>(integrator);
+        printf("maxdepth            = %d\n", typed->maxdepth);
+        printf("pixelbounds         = [ %d, %d, %d, %d ]\n", typed->pixelbounds[0], typed->pixelbounds[1], typed->pixelbounds[2], typed->pixelbounds[3]);
+      }
+      break;
+    case IntegratorType::VolPath:
+      {
+        const VolPathIntegrator* typed = dynamic_cast<const VolPathIntegrator*>(integrator);
+        printf("maxdepth            = %d\n", typed->maxdepth);
+        printf("pixelbounds         = [ %d, %d, %d, %d ]\n", typed->pixelbounds[0], typed->pixelbounds[1], typed->pixelbounds[2], typed->pixelbounds[3]);
+        printf("rrthreshold         = %f\n", typed->rrthreshold);
+        printf("lightsamplestrategy = %s\n", lookup(lightSampleStrategies, typed->lightsamplestrategy));
+      }
+      break;
+    case IntegratorType::AO:
+      {
+        const AOIntegrator* typed = dynamic_cast<const AOIntegrator*>(integrator);
+        printf("pixelbounds = [ %d, %d, %d, %d ]\n", typed->pixelbounds[0], typed->pixelbounds[1], typed->pixelbounds[2], typed->pixelbounds[3]);
+        printf("cossample   = %s\n", typed->cossample ? "true" : "false");
+        printf("nsamples    = %d\n", typed->nsamples);
+      }
+      break;
+    }
+
     printf("\n");
   }
 
 
   static void print_sampler(const Sampler* sampler)
   {
-    printf("==== Sampler ====\n");
-    // TODO
+    static const char* samplerTypes[] = { "02sequence", "lowdiscrepancy", "halton", "maxmindist", "random", "sobol", "stratified", nullptr };
+
+    printf("==== Sampler [%s] ====\n", lookup(samplerTypes, sampler->type()));
+    switch (sampler->type()) {
+    case SamplerType::ZeroTwoSequence:
+    case SamplerType::LowDiscrepancy:
+      {
+        const ZeroTwoSequenceSampler* typed = dynamic_cast<const ZeroTwoSequenceSampler*>(sampler);
+        printf("pixelsamples = %d\n", typed->pixelsamples);
+      }
+      break;
+    case SamplerType::Halton:
+      {
+        const HaltonSampler* typed = dynamic_cast<const HaltonSampler*>(sampler);
+        printf("pixelsamples = %d\n", typed->pixelsamples);
+      }
+      break;
+    case SamplerType::MaxMinDist:
+      {
+        const MaxMinDistSampler* typed = dynamic_cast<const MaxMinDistSampler*>(sampler);
+        printf("pixelsamples = %d\n", typed->pixelsamples);
+      }
+      break;
+    case SamplerType::Random:
+      {
+        const RandomSampler* typed = dynamic_cast<const RandomSampler*>(sampler);
+        printf("pixelsamples = %d\n", typed->pixelsamples);
+      }
+      break;
+    case SamplerType::Sobol:
+      {
+        const SobolSampler* typed = dynamic_cast<const SobolSampler*>(sampler);
+        printf("pixelsamples = %d\n", typed->pixelsamples);
+      }
+      break;
+    case SamplerType::Stratified:
+      {
+        const StratifiedSampler* typed = dynamic_cast<const StratifiedSampler*>(sampler);
+        printf("jitter   = %s\n", typed->jitter ? "true" : "false");
+        printf("xsamples = %d\n", typed->xsamples);
+        printf("ysamples = %d\n", typed->ysamples);
+      }
+      break;
+    }
+
     printf("\n");
+  }
+
+
+  static void print_world_summary(const Scene* scene)
+  {
+    constexpr uint32_t N = 8;
+    uint32_t counts[N] = {
+      static_cast<uint32_t>(scene->shapes.size()),
+      static_cast<uint32_t>(scene->objects.size()),
+      static_cast<uint32_t>(scene->instances.size()),
+      static_cast<uint32_t>(scene->lights.size()),
+      static_cast<uint32_t>(scene->areaLights.size()),
+      static_cast<uint32_t>(scene->materials.size()),
+      static_cast<uint32_t>(scene->textures.size()),
+      static_cast<uint32_t>(scene->mediums.size()),
+    };
+    const char* names[N] = {
+      "shapes",
+      "objects",
+      "instances",
+      "lights",
+      "area lights",
+      "materials",
+      "textures",
+      "mediums",
+    };
+    printf("==== World Summary ====\n");
+    print_histogram(N, counts, names);
   }
 
 
   static void print_shapes_summary(const Scene* scene)
   {
-    constexpr uint32_t kNumShapeTypes = static_cast<uint32_t>(ShapeType::PLYMesh) + 1;
-
-    uint32_t numShapesByType[kNumShapeTypes];
-    for (uint32_t i = 0; i < kNumShapeTypes; i++) {
-      numShapesByType[i] = 0;
+    if (scene->shapes.empty()) {
+      return;
     }
-    for (const Shape* shape : scene->shapes) {
-      numShapesByType[static_cast<uint32_t>(shape->type())]++;
-    }
+    constexpr uint32_t N = static_cast<uint32_t>(ShapeType::PLYMesh) + 1;
+    const char* names[] = { "cones", "curves", "cylinders", "disks", "hyperboloids", "paraboloids", "spheres", "trianglemeshes", "heightfields", "loopsubdivs", "nurbses", "plymeshes", nullptr };
+    printf("==== Shape Types ====\n");
+    print_histogram_by_type<Shape, N>(scene->shapes, names);
+  }
 
-    const char* shapeTypes[] = { "cones", "curves", "cylinders", "disks", "hyperboloids", "paraboloids", "spheres", "trianglemeshes", "heightfields", "loopsubdivs", "nurbses", "plymeshes", nullptr };
 
-    printf("==== Shapes ====\n");
-    for (uint32_t i = 0; i < kNumShapeTypes; i++) {
-      printf("%7u %s\n", numShapesByType[i], shapeTypes[i]);
+  static void print_lights_summary(const Scene* scene)
+  {
+
+    if (scene->lights.empty()) {
+      return;
     }
+    constexpr uint32_t N = static_cast<uint32_t>(LightType::Spot) + 1;
+    const char* names[] = { "distant", "goniometric", "infinite", "point", "projection", "spot", nullptr };
+    printf("==== Light Types ====\n");
+    print_histogram_by_type<Light, N>(scene->lights, names);
+  }
+
+
+  static void print_area_lights_summary(const Scene* scene)
+  {
+    if (scene->areaLights.empty()) {
+      return;
+    }
+    constexpr uint32_t N = static_cast<uint32_t>(AreaLightType::Diffuse) + 1;
+    const char* names[] = { "diffuse", nullptr };
+    printf("==== Area Light Types ====\n");
+    print_histogram_by_type<AreaLight, N>(scene->areaLights, names);
+  }
+
+
+  static void print_materials_summary(const Scene* scene)
+  {
+    if (scene->materials.empty()) {
+      return;
+    }
+    constexpr uint32_t N = static_cast<uint32_t>(MaterialType::Uber) + 1;
+    const char* names[] = { "disney", "fourier", "glass", "hair", "kdsubsurface", "matte", "metal", "mirror", "mix", "none", "plastic", "substrate", "subsurface", "translucent", "uber", nullptr };
+    printf("==== Material Types ====\n");
+    print_histogram_by_type<Material, N>(scene->materials, names);
+  }
+
+
+  static void print_textures_summary(const Scene* scene)
+  {
+    if (scene->textures.empty()) {
+      return;
+    }
+    constexpr uint32_t N = static_cast<uint32_t>(TextureType::PTex) + 1;
+    const char* names[] = { "bilerp", "checkerboard", "constant", "dots", "fbm", "imagemap", "marble", "mix", "scale", "uv", "windy", "wrinkled", "ptex", nullptr };
+    printf("==== Texture Types ====\n");
+    print_histogram_by_type<Texture, N>(scene->textures, names);
+  }
+
+
+  static void print_mediums_summary(const Scene* scene)
+  {
+    if (scene->mediums.empty()) {
+      return;
+    }
+    constexpr uint32_t N = static_cast<uint32_t>(MediumType::Heterogeneous) + 1;
+    const char* names[] = { "homogeneous", "heterogeneous", nullptr };
+    printf("==== Medium Types ====\n");
+    print_histogram_by_type<Medium, N>(scene->mediums, names);
   }
 
 } // namespace minipbrt

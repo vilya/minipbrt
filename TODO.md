@@ -10,10 +10,10 @@ Set up any missing defaults after the scene has been parsed:
 Allow overriding of material params in Shape statements.
 
 Add functions for converting shapes into a TriangleMesh:
+[ ] PLYMesh (loads the file)
 [ ] HeightField
 [ ] LoopSubdiv
 [ ] Nurbs
-[ ] PLYMesh (loads the file)
 
 
 Nice to have (improvements thaat don't affect correctness)
@@ -56,3 +56,14 @@ Code clean-up:
   `parse_Identity()`, `parse_TransformBegin()`, etc).
 * Make `set_error()` return bool so it can be used as part of a return statement.
 * Remove any unused code.
+
+Optional callback-based parsing interface
+* For use if you have your own scene data model that you want to populate and
+  don't want to create our data model as an intermediate step.
+* Separate the existing scene construction code into a SceneBuilder class,
+  Parser should only invoke callbacks. SceneBuilder should be the default 
+  callback handler.
+
+Performance comparisons:
+* With PBRT's own parser
+* With Ingo Wald's library

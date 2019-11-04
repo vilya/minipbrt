@@ -87,6 +87,11 @@ Performance
 * Peak memory use during parsing: ?
 * Post-parsing memory use:        ?
 
+Note that I was hitting swap space at around 11.5 GB - 12 GB. Peak memory
+usage for this scene is somewhere around 14 or 15 GB. On a machine with 64 GB
+(i.e. enough so that we don't start swapping) parsing completes in 1 minute 53
+seconds).
+
 [Landscape Scene](https://www.pbrt.org/scenes-v3.html) from the PBRT v3 scene collection:
 * Parsing time:                   < 1 second (note: not yet loading PLY meshes)
 * Peak memory use during parsing: ?

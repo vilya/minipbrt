@@ -2122,7 +2122,7 @@ namespace minipbrt {
         negativeExponent = true;
         ++m_end;
       }
-      else {
+      else if (*m_end == '+') {
         ++m_end;
       }
 
@@ -2141,7 +2141,7 @@ namespace minipbrt {
         if (negativeExponent) {
           exponent = -exponent;
         }
-        localVal *= std::pow(10.0f, exponent);
+        localVal *= std::pow(10.0, exponent);
       }
     }
 

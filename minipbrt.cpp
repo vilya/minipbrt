@@ -2113,6 +2113,7 @@ namespace minipbrt {
           }
           return false;
         }
+        ++m_pos;
       }
       ++m_pos; // move past the newline char
       m_end = m_pos;

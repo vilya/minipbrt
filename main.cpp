@@ -534,14 +534,18 @@ int main(int argc, char** argv)
   if (argc == 2) {
     minipbrt::Parser parser;
     bool ok = parser.parse(argv[1]);
+    bool plyOK = ok ? parser.borrow_scene()->load_all_ply_meshes() : false;
+
     if (!ok) {
       minipbrt::print_error(parser.get_error());
       return EXIT_FAILURE;
     }
+    else if (!plyOK) {
+      fprintf(stderr, "[%s] Failed to load ply meshes.\n", argv[1]);
+      return EXIT_FAILURE;
+    }
     else {
-      minipbrt::Scene* scene = parser.take_scene();
-      minipbrt::print_scene_info(scene);
-      delete scene;
+      minipbrt::print_scene_info(parser.borrow_scene());
       return EXIT_SUCCESS;
     }
   }
@@ -551,7 +555,7 @@ int main(int argc, char** argv)
       if (argv[i][0] == '-') {
         continue;
       }
-      int newWidth = strlen(argv[i]);
+      int newWidth = int(strlen(argv[i]));
       if (newWidth > width) {
         width = newWidth;
       }
@@ -566,20 +570,26 @@ int main(int argc, char** argv)
 
       minipbrt::Parser parser;
       bool ok = parser.parse(argv[i]);
-      printf("%-*s  %s", width, argv[i], ok ? "passed" : "FAILED");
-      if (ok) {
-        printf("\n");
-        ++numPassed;
-      }
-      else {
+      bool plyOK = ok ? parser.borrow_scene()->load_all_ply_meshes() : false;
+      printf("%-*s  %s", width, argv[i], (ok && plyOK) ? "passed" : "FAILED");
+      if (!ok) {
         const minipbrt::Error* err = parser.get_error();
         printf(" ---> [%s, line %lld, column %lld] %s\n", err->filename(), err->line(), err->column(), err->message());
         ++numFailed;
+      }
+      else if (!plyOK) {
+        printf(" ---> Failed to load ply meshes\n");
+        ++numFailed;
+      }
+      else {
+        printf("\n");
+        ++numPassed;
       }
       fflush(stdout);
     }
     printf("----\n");
     printf("%d passed\n", numPassed);
     printf("%d failed\n", numFailed);
+    return (numFailed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
   }
 }

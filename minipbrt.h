@@ -992,6 +992,7 @@ namespace minipbrt {
     Cylinder,
   };
 
+  struct TriangleMesh;
 
   struct Shape {
     Transform shapeToWorld; // If shape is part of an object, this is the shapeToObject transform.
@@ -1003,6 +1004,7 @@ namespace minipbrt {
 
     virtual ~Shape() {}
     virtual ShapeType type() const = 0;
+    virtual TriangleMesh* triangle_mesh() const { return nullptr; }
   };
 
 
@@ -1126,6 +1128,7 @@ namespace minipbrt {
       delete[] filename;
     }
     virtual ShapeType type() const override { return ShapeType::PLYMesh; }
+    virtual TriangleMesh* triangle_mesh() const override;
   };
 
 
@@ -1446,8 +1449,25 @@ namespace minipbrt {
     std::vector<Texture*>   textures;
     std::vector<Medium*>    mediums;
 
+
     Scene();
     ~Scene();
+
+    /// Call `triangle_mesh()` on the shape at index i in the list. If the result is non-null,
+    /// replace the original shape with the new triangle mesh. Return value indicates whether
+    /// the original shape was replaced.
+    bool to_triangle_mesh(uint32_t shapeIndex);
+
+    /// Convert all shapes with one of the given types into a triangle mesh.
+    /// This is equivalent to iterating over the shapes list & calling
+    /// `to_triangle_mesh()` on every item with a type contained in
+    /// `typesToConvert`. The return value is `true` if we were able to convert
+    /// all relevant shapes successfully, or `false` if there were any we
+    /// couldn't convert.
+    bool shapes_to_triangle_mesh(Bits<ShapeType> typesToConvert);
+
+    /// Shorthand for `shapes_to_triangle_mesh(ShapeType::PLYMesh)`.
+    bool load_all_ply_meshes();
   };
 
 
@@ -1603,6 +1623,7 @@ namespace minipbrt {
     const Error* get_error() const;
 
     Scene* take_scene();
+    Scene* borrow_scene();
 
   private:
     bool parse_Identity();
@@ -1666,6 +1687,7 @@ namespace minipbrt {
     const ParamInfo* find_param(const char* name, ParamTypeSet allowedTypes) const;
 
     bool string_param(const char* name, char** dest, bool copy=false);
+    bool filename_param(const char* name, char** dest);
     bool bool_param(const char* name, bool* dest);
     bool int_param(const char* name, int* dest);
     bool int_array_param(const char* name, uint32_t len, int* dest);

@@ -199,6 +199,59 @@ namespace minipbrt {
 
 
   //
+  // PLY constants
+  //
+
+  static constexpr uint32_t kPLYReadBufferSize = 32 * 1024;
+
+  static constexpr uint32_t kPLYMaxElements   = 256;
+  static constexpr uint32_t kPLYMaxProperties = 256;
+
+  static const char* kPLYFileTypes[] = { "ascii", "binary_little_endian", "binary_big_endian", nullptr };
+  static const char* kPLYPropertyTypes[] = { "char", "uchar", "short", "ushort", "int", "uint", "float", "double", nullptr };
+  static const uint32_t kPLYPropertySize[]= { 1, 1, 2, 2, 4, 4, 4, 8 };
+
+  enum class PLYPropertyType {
+    Char,
+    UChar,
+    Short,
+    UShort,
+    Int,
+    UInt,
+    Float,
+    Double,
+
+    None, //!< Special value used in Element::listCountType to indicate a non-list property.
+  };
+
+  struct PLYTypeAlias {
+    const char* name;
+    PLYPropertyType type;
+  };
+
+  static const PLYTypeAlias kTypeAliases[] = {
+    { "char",   PLYPropertyType::Char   },
+    { "uchar",  PLYPropertyType::UChar  },
+    { "short",  PLYPropertyType::Short  },
+    { "ushort", PLYPropertyType::UShort },
+    { "int",    PLYPropertyType::Int    },
+    { "uint",   PLYPropertyType::UInt   },
+    { "float",  PLYPropertyType::Float  },
+    { "double", PLYPropertyType::Double },
+
+    { "uint8",  PLYPropertyType::UChar  },
+    { "uint16", PLYPropertyType::UShort },
+    { "uint32", PLYPropertyType::UInt   },
+
+    { "int8",   PLYPropertyType::Char   },
+    { "int16",  PLYPropertyType::Short  },
+    { "int32",  PLYPropertyType::Int    },
+
+    { nullptr,  PLYPropertyType::None   }
+  };
+
+
+  //
   // Constants
   //
 
@@ -733,6 +786,111 @@ namespace minipbrt {
 
 
   //
+  // PLY Parsing types
+  //
+
+  enum class PLYFileType {
+    ASCII,
+    Binary,
+    BinaryBigEndian,
+  };
+
+
+  struct PLYProperty {
+    std::string name;
+    PLYPropertyType type      = PLYPropertyType::None; //!< Type of the data. Must be set to a value other than None.
+    PLYPropertyType countType = PLYPropertyType::None; //!< None indicates this is not a list type, otherwise it's the type for the list count.
+    uint32_t offset           = 0;                  //!< Byte offset from the start of the row.
+    uint32_t stride           = 0;
+
+    std::vector<uint8_t> listData;
+    std::vector<uint32_t> rowStart; // Entry `i` is the index in listData at which the data for row i starts.
+    std::vector<uint32_t> rowCount; // Entry `i` is the number of items (*not* the number of bytes) in row `i`.
+  };
+
+
+  struct PLYElement {
+    std::string              name;                 //!< Name of this element.
+    std::vector<PLYProperty> properties;
+    uint32_t                 count      = 0;       //!< The number of items in this element (e.g. the number of vertices if this is the vertex element).
+    bool                     fixedSize  = true;    //!< `true` if there are only fixed-size properties in this element, i.e. no list properties.
+    uint32_t                 rowStride  = 0;
+  };
+
+
+  class PLYReader {
+  public:
+    PLYReader(const char* filename);
+    ~PLYReader();
+
+    bool valid() const;
+
+    bool has_element() const;
+    const PLYElement* element() const;
+    bool load_element();
+    void next_element();
+
+  private:
+    bool refill_buffer();
+    bool advance();
+    bool next_line();
+    bool match(const char* str);
+    bool which(const char* values[], uint32_t* index);
+    bool which_property_type(PLYPropertyType* type);
+    bool keyword(const char* kw);
+    bool identifier(char* dest, size_t destLen);
+
+    template <class T> // T must be a type compatible with uint32_t.
+    bool typed_which(const char* values[], T* index) {
+      return which(values, reinterpret_cast<uint32_t*>(index));
+    }
+
+    bool int_literal(int* value);
+    bool float_literal(float* value);
+    bool double_literal(double* value);
+
+    bool parse_elements();
+    bool parse_element();
+    bool parse_property(std::vector<PLYProperty>& properties);
+
+    void setup_element(PLYElement& elem);
+
+    bool load_fixed_size_element(PLYElement& elem);
+    bool load_variable_size_element(PLYElement& elem);
+
+    bool load_ascii_scalar_property(PLYProperty& prop, size_t& destIndex);
+    bool load_ascii_list_property(PLYProperty& prop);
+    bool load_binary_scalar_property(PLYProperty& prop, size_t& destIndex);
+    bool load_binary_list_property(PLYProperty& prop);
+    bool load_binary_scalar_property_big_endian(PLYProperty& prop, size_t& destIndex);
+    bool load_binary_list_property_big_endian(PLYProperty& prop);
+
+    bool ascii_value(PLYPropertyType propType, uint8_t value[8]);
+
+  private:
+    FILE* m_f             = nullptr;
+    char* m_buf           = nullptr;
+    const char* m_bufEnd  = nullptr;
+    const char* m_pos     = nullptr;
+    const char* m_end     = nullptr;
+    bool m_atEOF          = false;
+    int64_t m_bufOffset   = 0;
+
+    bool m_valid          = false;
+
+    PLYFileType m_fileType = PLYFileType::ASCII; //!< Whether the file was ascii, binary little-endian, or binary big-endian.
+    int m_majorVersion     = 0;
+    int m_minorVersion     = 0;
+    std::vector<PLYElement> m_elements;         //!< Element descriptors for this file.
+
+    size_t m_currentElement = 0;
+    bool m_elementLoaded    = false;
+    std::vector<uint8_t> m_elementData;
+    std::vector<uint32_t> m_rowStarts; //!< Only used for elements where fixedSize = false.
+  };
+
+
+  //
   // Internal-only functions
   //
 
@@ -750,7 +908,7 @@ namespace minipbrt {
 
   static inline bool is_letter(char ch)
   {
-    ch |= 32;
+    ch |= 32; // upper and lower case letters differ only at this bit.
     return ch >= 'a' && ch <= 'z';
   }
 
@@ -758,6 +916,12 @@ namespace minipbrt {
   static inline bool is_alnum(char ch)
   {
     return is_digit(ch) || is_letter(ch);
+  }
+
+
+  static inline bool is_keyword_start(char ch)
+  {
+    return is_letter(ch) || ch == '_';
   }
 
 
@@ -889,6 +1053,190 @@ namespace minipbrt {
     static_assert(sizeof(off_t) == sizeof(int64_t), "off_t is not 64 bits.");
     fseeko(file, offset, origin);
   #endif
+  }
+
+
+  static bool int_literal(const char* start, char const** end, int* val)
+  {
+    const char* pos = start;
+
+    bool negative = false;
+    if (*pos == '-') {
+      negative = true;
+      ++pos;
+    }
+    else if (*pos == '+') {
+      ++pos;
+    }
+
+    bool hasLeadingZeroes = *pos == '0';
+    if (hasLeadingZeroes) {
+      do {
+        ++pos;
+      } while (*pos == '0');
+    }
+
+    int numDigits = 0;
+    int localVal = 0;
+    while (is_digit(*pos)) {
+      // FIXME: this will overflow if we get too many digits.
+      localVal = localVal * 10 + static_cast<int>(*pos - '0');
+      ++numDigits;
+      ++pos;
+    }
+
+    if (numDigits == 0 && hasLeadingZeroes) {
+      numDigits = 1;
+    }
+
+    if (numDigits == 0 || is_letter(*pos) || *pos == '_') {
+      return false;
+    }
+    else if (numDigits > 10) {
+      // Overflow, literal value is larger than an int can hold.
+      // FIXME: this won't catch *all* cases of overflow, make it exact.
+      return false;
+    }
+
+    if (val != nullptr) {
+      *val = negative ? -localVal : localVal;
+    }
+    if (end != nullptr) {
+      *end = pos;
+    }
+    return true;
+  }
+
+
+  static bool double_literal(const char* start, char const** end, double* val)
+  {
+    const char* pos = start;
+
+    bool negative = false;
+    if (*pos == '-') {
+      negative = true;
+      ++pos;
+    }
+    else if (*pos == '+') {
+      ++pos;
+    }
+
+    double localVal = 0.0;
+
+    bool hasIntDigits = is_digit(*pos);
+    if (hasIntDigits) {
+      do {
+        localVal = localVal * 10.0 + kDoubleDigits[*pos - '0'];
+        ++pos;
+      } while (is_digit(*pos));
+    }
+    else if (*pos != '.') {
+//      set_error("Not a floating point number");
+      return false;
+    }
+
+    bool hasFracDigits = false;
+    if (*pos == '.') {
+      ++pos;
+      hasFracDigits = is_digit(*pos);
+      if (hasFracDigits) {
+        double scale = 0.1;
+        do {
+          localVal += scale * kDoubleDigits[*pos - '0'];
+          scale *= 0.1;
+          ++pos;
+        } while (is_digit(*pos));
+      }
+      else if (!hasIntDigits) {
+//        set_error("Floating point number has no digits before or after the decimal point");
+        return false;
+      }
+    }
+
+    bool hasExponent = *pos == 'e' || *pos == 'E';
+    if (hasExponent) {
+      ++pos;
+      bool negativeExponent = false;
+      if (*pos == '-') {
+        negativeExponent = true;
+        ++pos;
+      }
+      else if (*pos == '+') {
+        ++pos;
+      }
+
+      if (!is_digit(*pos)) {
+//        set_error("Floating point exponent has no digits");
+        return false; // error: exponent part has no digits.
+      }
+
+      double exponent = 0.0;
+      do {
+        exponent = exponent * 10.0 + kDoubleDigits[*pos - '0'];
+        ++pos;
+      } while (is_digit(*pos));
+
+      if (val != nullptr) {
+        if (negativeExponent) {
+          exponent = -exponent;
+        }
+        localVal *= std::pow(10.0, exponent);
+      }
+    }
+
+    if (*pos == '.' || *pos == '_' || is_alnum(*pos)) {
+//      set_error("Floating point number has trailing chars");
+      return false;
+    }
+
+    if (val != nullptr) {
+      *val = localVal;
+    }
+    if (end != nullptr) {
+      *end = pos;
+    }
+    return true;
+  }
+
+
+  static bool float_literal(const char* start, char const** end, float* val)
+  {
+    double tmp = 0.0;
+    bool ok = double_literal(start, end, &tmp);
+    if (ok && val != nullptr) {
+      *val = static_cast<float>(tmp);
+    }
+    return ok;
+  }
+
+
+  static bool match_chars(const char* expected, const char* start, char const** end)
+  {
+    const char* pos = start;
+    while (*pos == *expected && *expected != '\0') {
+      ++pos;
+      ++expected;
+    }
+    if (*expected != '\0') {
+      return false;
+    }
+    if (end != nullptr) {
+      *end = pos;
+    }
+    return true;
+  }
+
+
+  static bool match_keyword(const char* expected, const char* start, const char** end)
+  {
+    const char* tmp = nullptr;
+    if (!match_chars(expected, start, &tmp) || is_keyword_part(*tmp)) {
+      return false;
+    }
+    if (end != nullptr) {
+      *end = tmp;
+    }
+    return true;
   }
 
 
@@ -1122,6 +1470,40 @@ namespace minipbrt {
     float xyz[3];
     blackbody_to_xyz(blackbody, xyz);
     xyz_to_rgb(xyz, rgb);
+  }
+
+
+  static void endian_swap_2(uint8_t* data)
+  {
+    uint8_t tmp = data[0];
+    data[0] = data[1];
+    data[1] = tmp;
+  }
+
+
+  static void endian_swap_4(uint8_t* data)
+  {
+    uint8_t tmp = data[0];
+    data[0] = data[3];
+    data[3] = tmp;
+    tmp = data[1];
+    data[1] = data[2];
+    data[2] = tmp;
+  }
+
+
+  static void endian_swap_8(uint8_t* data)
+  {
+    uint8_t tmp[8];
+    data[0] = tmp[7];
+    data[1] = tmp[6];
+    data[2] = tmp[5];
+    data[3] = tmp[4];
+    data[4] = tmp[3];
+    data[5] = tmp[2];
+    data[6] = tmp[1];
+    data[7] = tmp[0];
+    std::memcpy(data, tmp, 8);
   }
 
 
@@ -1539,6 +1921,810 @@ namespace minipbrt {
 
 
   //
+  // PLYReader methods
+  //
+
+  PLYReader::PLYReader(const char* filename)
+  {
+    m_buf = new char[kPLYReadBufferSize + 1];
+    m_buf[kPLYReadBufferSize] = '\0';
+
+    m_bufEnd = m_buf + kPLYReadBufferSize;
+    m_pos = m_bufEnd;
+    m_end = m_bufEnd;
+
+    if (fopen_s(&m_f, filename, "rb") != 0) {
+      m_f = nullptr;
+      m_valid = false;
+      return;
+    }
+    m_valid = true;
+
+    refill_buffer();
+
+    m_valid = keyword("ply") && next_line() &&
+              keyword("format") && advance() &&
+              typed_which(kPLYFileTypes, &m_fileType) && advance() &&
+              int_literal(&m_majorVersion) && advance() &&
+              match(".") && advance() &&
+              int_literal(&m_minorVersion) && next_line();
+    m_valid = m_valid &&
+              parse_elements() &&
+              keyword("end_header") && advance() && match("\n");
+    if (!m_valid) {
+      return;
+    }
+
+    if (m_fileType == PLYFileType::BinaryBigEndian) {
+      // TODO: add support for the binary big-endian version of the format.
+      m_valid = false;
+      return;
+    }
+
+    // If we got here, the file is a valid PLY. We may have read past the end
+    // of the header when filling our buffer for parsing, so we need to move
+    // the file pointer to the right offset.
+    file_seek(m_f, m_bufOffset + int64_t(m_end - m_buf), SEEK_SET);
+
+    for (PLYElement& elem : m_elements) {
+      setup_element(elem);
+    }
+  }
+
+
+  PLYReader::~PLYReader()
+  {
+    if (m_f != nullptr) {
+      fclose(m_f);
+    }
+    delete[] m_buf;
+  }
+
+
+  bool PLYReader::valid() const
+  {
+    return m_valid;
+  }
+
+
+  bool PLYReader::has_element() const
+  {
+    return m_valid && m_currentElement < m_elements.size();
+  }
+
+
+  const PLYElement* PLYReader::element() const
+  {
+    assert(has_element());
+    return &m_elements[m_currentElement];
+  }
+
+
+  bool PLYReader::load_element()
+  {
+    assert(has_element());
+    if (m_elementLoaded) {
+      return true;
+    }
+
+    PLYElement& elem = m_elements[m_currentElement];
+    return elem.fixedSize ? load_fixed_size_element(elem) : load_variable_size_element(elem);
+  }
+
+
+  void PLYReader::next_element()
+  {
+    if (has_element()) {
+      ++m_currentElement;
+    }
+  }
+
+
+  //
+  // PLYReader private methods
+  //
+
+  bool PLYReader::refill_buffer()
+  {
+    if (m_f == nullptr || m_atEOF) {
+      // Nothing left to read.
+      return false;
+    }
+
+    if (m_pos == m_buf && m_end == m_bufEnd) {
+      // Can't make any more room in the buffer!
+      return false;
+    }
+
+    // Move everything from the start of the current token onwards, to the
+    // start of the read buffer.
+    size_t remain = static_cast<size_t>(m_bufEnd - m_pos);
+    if (remain > 0 && m_pos > m_buf) {
+      std::memmove(m_buf, m_pos, sizeof(char) * remain);
+    }
+    m_bufOffset = file_pos(m_f) - static_cast<int64_t>(remain);
+    m_end = m_buf + (m_end - m_pos);
+    m_pos = m_buf;
+
+    // Fill the remaining space in the buffer with data from the file.
+    size_t len = fread(m_buf + remain, sizeof(char), kPLYReadBufferSize - remain, m_f);
+    if (len + remain < kPLYReadBufferSize) {
+      m_atEOF = true;
+    }
+    m_bufEnd = m_buf + len;
+
+    // If it looks like a token might run past the end of this buffer, move
+    // the buffer end pointer back before it & rewind the file. This way the
+    // next refill will pick up the whole of the token.
+    if (!m_atEOF && !is_safe_buffer_end(m_bufEnd[-1])) {
+      const char* safe = m_bufEnd - 2;
+      while (safe >= m_end && !is_safe_buffer_end(*safe)) {
+        --safe;
+      }
+      if (safe < m_end) {
+        // No safe places to rewind to in the whole buffer!
+        return false;
+      }
+      ++safe;
+
+      int64_t offset = static_cast<int64_t>(safe - m_bufEnd);
+      if (offset != 0) {
+        file_seek(m_f, offset, SEEK_CUR);
+        m_bufEnd = safe;
+      }
+    }
+    m_buf[m_bufEnd - m_buf] = '\0';
+
+    return true;
+  }
+
+
+  // Advances to end of line or to next non-whitespace char.
+  bool PLYReader::advance()
+  {
+    m_pos = m_end;
+    while (true) {
+      while (is_whitespace(*m_pos)) {
+        ++m_pos;
+      }
+      if (m_pos == m_bufEnd) {
+        m_end = m_pos;
+        if (refill_buffer()) {
+          continue;
+        }
+        return false;
+      }
+      break;
+    }
+    m_end = m_pos;
+    return true;
+  }
+
+
+  bool PLYReader::next_line()
+  {
+    m_pos = m_end;
+    do {
+      while (*m_pos != '\n') {
+        if (m_pos == m_bufEnd) {
+          m_end = m_pos;
+          if (refill_buffer()) {
+            continue;
+          }
+          return false;
+        }
+      }
+      ++m_pos; // move past the newline char
+      m_end = m_pos;
+    } while (match("comment"));
+
+    return true;
+  }
+
+
+  bool PLYReader::match(const char* str)
+  {
+    m_end = m_pos;
+    while (m_end < m_bufEnd && *str != '\0' && *m_end == *str) {
+      ++m_end;
+      ++str;
+    }
+    if (*str != '\0') {
+      return false;
+    }
+    return true;
+  }
+
+
+  bool PLYReader::which(const char* values[], uint32_t* index)
+  {
+    for (uint32_t i = 0; values[i] != nullptr; i++) {
+      if (keyword(values[i])) {
+        *index = i;
+        return true;
+      }
+    }
+    return false;
+  }
+
+
+  bool PLYReader::which_property_type(PLYPropertyType* type)
+  {
+    for (uint32_t i = 0; kTypeAliases[i].name != nullptr; i++) {
+      if (keyword(kTypeAliases[i].name)) {
+        *type = kTypeAliases[i].type;
+        return true;
+      }
+    }
+    return false;
+  }
+
+
+  bool PLYReader::keyword(const char* kw)
+  {
+    return match(kw) && !is_keyword_part(*m_end);
+  }
+
+
+  bool PLYReader::identifier(char* dest, size_t destLen)
+  {
+    m_end = m_pos;
+    if (!is_keyword_start(*m_end) || destLen == 0) {
+      return false;
+    }
+    do {
+      ++m_end;
+    } while (is_keyword_part(*m_end));
+
+    size_t len = static_cast<size_t>(m_end - m_pos);
+    if (len >= destLen) {
+      return false; // identifier too large for dest!
+    }
+    std::memcpy(dest, m_pos, sizeof(char) * len);
+    dest[len] = '\0';
+    return true;
+  }
+
+
+  bool PLYReader::int_literal(int* value)
+  {
+    return minipbrt::int_literal(m_pos, &m_end, value);
+  }
+
+
+  bool PLYReader::float_literal(float* value)
+  {
+    return minipbrt::float_literal(m_pos, &m_end, value);
+  }
+
+
+  bool PLYReader::double_literal(double* value)
+  {
+    return minipbrt::double_literal(m_pos, &m_end, value);
+  }
+
+
+  bool PLYReader::parse_elements()
+  {
+    m_elements.reserve(4);
+    while (m_valid && keyword("element")) {
+      parse_element();
+    }
+    return true;
+  }
+
+
+  bool PLYReader::parse_element()
+  {
+    char name[256];
+    int count = 0;
+
+    m_valid = keyword("element") && advance() &&
+              identifier(name, sizeof(name)) && advance() &&
+              int_literal(&count) && next_line();
+    if (!m_valid || count < 0) {
+      return false;
+    }
+
+    m_elements.push_back(PLYElement());
+    PLYElement& elem = m_elements.back();
+    elem.name = name;
+    elem.count = static_cast<uint32_t>(count);
+    elem.properties.reserve(10);
+
+    while (m_valid && keyword("property")) {
+      parse_property(elem.properties);
+    }
+
+    return true;
+  }
+
+
+  bool PLYReader::parse_property(std::vector<PLYProperty>& properties)
+  {
+    char name[256];
+    PLYPropertyType type      = PLYPropertyType::None;
+    PLYPropertyType countType = PLYPropertyType::None;
+
+    m_valid = keyword("property") && advance();
+    if (!m_valid) {
+      return false;
+    }
+
+    if (keyword("list")) {
+      // This is a list property
+      m_valid = advance() && which_property_type(&countType) && advance();
+      if (!m_valid) {
+        return false;
+      }
+    }
+
+    m_valid = which_property_type(&type) && advance() &&
+              identifier(name, sizeof(name)) && next_line();
+    if (!m_valid) {
+      return false;
+    }
+
+    properties.push_back(PLYProperty());
+    PLYProperty& prop = properties.back();
+    prop.name = name;
+    prop.type = type;
+    prop.countType = countType;
+
+    return true;
+  }
+
+
+  void PLYReader::setup_element(PLYElement& elem)
+  {
+    for (PLYProperty& prop : elem.properties) {
+      if (prop.countType != PLYPropertyType::None) {
+        elem.fixedSize = false;
+      }
+    }
+
+    // Note that each list property gets its own separate storage. Only fixed
+    // size properties go into the common data block. The `rowStride` is the
+    // size of a row in the common data block.
+
+    for (PLYProperty& prop : elem.properties) {
+      if (prop.countType != PLYPropertyType::None) {
+        continue;
+      }
+      prop.offset = elem.rowStride;
+      elem.rowStride += kPLYPropertySize[uint32_t(prop.type)];
+    }
+  }
+
+
+  bool PLYReader::load_fixed_size_element(PLYElement& elem)
+  {
+    m_elementData.clear();
+    m_elementData.resize(elem.count * elem.rowStride);
+
+    if (m_fileType == PLYFileType::ASCII) {
+      size_t back = 0;
+
+      for (uint32_t row = 0; row < elem.count; row++) {
+        for (PLYProperty& prop : elem.properties) {
+          if (!load_ascii_scalar_property(prop, back)) {
+            m_valid = false;
+            return false;
+          }
+          back += kPLYPropertySize[uint32_t(prop.type)];
+        }
+        next_line();
+      }
+    }
+    else {
+      // We can read all the data for a fixed size binary element in single `fread` call.
+      size_t numRead = fread(m_elementData.data(), elem.rowStride, elem.count, m_f);
+      if (numRead != elem.count) {
+        m_valid = false;
+        return false;
+      }
+
+      // We assume the CPU is aa little endian, so if the file is big-endian we
+      // need to do an endianness swap on every data item in the block.
+      if (m_fileType == PLYFileType::BinaryBigEndian) {
+        uint8_t* data = m_elementData.data();
+        for (uint32_t row = 0; row < elem.count; row++) {
+          for (PLYProperty& prop : elem.properties) {
+            size_t numBytes = kPLYPropertySize[uint32_t(prop.type)];
+            switch (numBytes) {
+            case 2:
+              endian_swap_2(data);
+              break;
+            case 4:
+              endian_swap_4(data);
+              break;
+            case 8:
+              endian_swap_8(data);
+              break;
+            default:
+              break;
+            }
+            data += numBytes;
+          }
+        }
+      }
+    }
+
+    m_elementLoaded = true;
+    return true;
+  }
+
+
+  bool PLYReader::load_variable_size_element(PLYElement& elem)
+  {
+    m_elementData.clear();
+    m_elementData.resize(elem.count * elem.rowStride);
+
+    if (m_fileType == PLYFileType::Binary) {
+      size_t back = 0;
+      for (uint32_t row = 0; row < elem.count; row++) {
+        for (PLYProperty& prop : elem.properties) {
+          if (prop.countType == PLYPropertyType::None) {
+            m_valid = load_binary_scalar_property(prop, back);
+          }
+          else {
+            load_binary_list_property(prop);
+          }
+        }
+      }
+    }
+    else if (m_fileType == PLYFileType::ASCII) {
+      size_t back = 0;
+      for (uint32_t row = 0; row < elem.count; row++) {
+        for (PLYProperty& prop : elem.properties) {
+          if (prop.countType == PLYPropertyType::None) {
+            m_valid = load_ascii_scalar_property(prop, back);
+          }
+          else {
+            load_ascii_list_property(prop);
+          }
+        }
+        next_line();
+      }
+    }
+    else { // m_fileType == PLYFileType::BinaryBigEndian
+      size_t back = 0;
+      for (uint32_t row = 0; row < elem.count; row++) {
+        for (PLYProperty& prop : elem.properties) {
+          if (prop.countType == PLYPropertyType::None) {
+            m_valid = load_binary_scalar_property_big_endian(prop, back);
+          }
+          else {
+            load_binary_list_property_big_endian(prop);
+          }
+        }
+      }
+    }
+
+    m_elementLoaded = true;
+    return true;
+  }
+
+
+  bool PLYReader::load_ascii_scalar_property(PLYProperty& prop, size_t& destIndex)
+  {
+    uint8_t value[8];
+    if (!ascii_value(prop.type, value)) {
+      return false;
+    }
+
+    size_t numBytes = kPLYPropertySize[uint32_t(prop.type)];
+    std::memcpy(m_elementData.data() + destIndex, value, numBytes);
+    destIndex += numBytes;
+    return true;
+  }
+
+
+  bool PLYReader::load_ascii_list_property(PLYProperty& prop)
+  {
+    int count = 0;
+    m_valid = (prop.countType < PLYPropertyType::Float) && int_literal(&count) && advance() && (count >= 0);
+    if (!m_valid) {
+      return false;
+    }
+
+    const size_t numBytes = kPLYPropertySize[uint32_t(prop.type)];
+
+    size_t back = prop.listData.size();
+    prop.rowStart.push_back(static_cast<uint32_t>(back));
+    prop.rowCount.push_back(static_cast<uint32_t>(count));
+    prop.listData.resize(back + numBytes * size_t(count));
+
+    for (uint32_t i = 0; i < uint32_t(count); i++) {
+      if (!ascii_value(prop.type, prop.listData.data() + back)) {
+        m_valid = false;
+        return false;
+      }
+      back += numBytes;
+    }
+
+    return true;
+  }
+
+
+  bool PLYReader::load_binary_scalar_property(PLYProperty& prop, size_t& destIndex)
+  {
+    size_t numBytes = kPLYPropertySize[uint32_t(prop.type)];
+    if (fread(m_elementData.data() + destIndex, numBytes, 1, m_f) != 1) {
+      m_valid = false;
+      return false;
+    }
+    destIndex += numBytes;
+    return true;
+  }
+
+
+  bool PLYReader::load_binary_list_property(PLYProperty& prop)
+  {
+    uint8_t tmp[8];
+    if (fread(tmp, kPLYPropertySize[uint32_t(prop.countType)], 1, m_f) != 1) {
+      m_valid = false;
+      return false;
+    }
+
+    int count = 0;
+    switch (prop.countType) {
+    case PLYPropertyType::Char:
+      count = static_cast<int>(*reinterpret_cast<int8_t*>(tmp));
+      break;
+    case PLYPropertyType::UChar:
+      count = static_cast<int>(*reinterpret_cast<uint8_t*>(tmp));
+      break;
+    case PLYPropertyType::Short:
+      count = static_cast<int>(*reinterpret_cast<int16_t*>(tmp));
+      break;
+    case PLYPropertyType::UShort:
+      count = static_cast<int>(*reinterpret_cast<uint16_t*>(tmp));
+      break;
+    case PLYPropertyType::Int:
+      count = *reinterpret_cast<int*>(tmp);
+      break;
+    case PLYPropertyType::UInt:
+      count = static_cast<int>(*reinterpret_cast<uint32_t*>(tmp));
+      break;
+    default:
+      m_valid = false;
+      return false;
+    }
+
+    if (count < 0) {
+      m_valid = false;
+      return false;
+    }
+
+    const size_t numBytes = kPLYPropertySize[uint32_t(prop.type)];
+
+    size_t back = prop.listData.size();
+    prop.rowStart.push_back(static_cast<uint32_t>(back));
+    prop.rowCount.push_back(static_cast<uint32_t>(count));
+    prop.listData.resize(back + numBytes * size_t(count));
+    if (fread(prop.listData.data() + back, numBytes, size_t(count), m_f) != size_t(count)) {
+      m_valid = false;
+    }
+    return m_valid;
+  }
+
+
+  bool PLYReader::load_binary_scalar_property_big_endian(PLYProperty &prop, size_t &destIndex)
+  {
+    size_t startIndex = destIndex;
+    if (load_binary_scalar_property(prop, destIndex)) {
+      switch (kPLYPropertySize[uint32_t(prop.type)]) {
+      case 2:
+        endian_swap_2(m_elementData.data() + startIndex);
+        break;
+      case 4:
+        endian_swap_4(m_elementData.data() + startIndex);
+        break;
+      case 8:
+        endian_swap_8(m_elementData.data() + startIndex);
+        break;
+      default:
+        break;
+      }
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
+
+
+  bool PLYReader::load_binary_list_property_big_endian(PLYProperty &prop)
+  {
+    uint8_t tmp[8];
+    if (fread(tmp, kPLYPropertySize[uint32_t(prop.countType)], 1, m_f) != 1) {
+      m_valid = false;
+      return false;
+    }
+
+    int count = 0;
+    switch (prop.countType) {
+    case PLYPropertyType::Char:
+      count = static_cast<int>(*reinterpret_cast<int8_t*>(tmp));
+      break;
+    case PLYPropertyType::UChar:
+      count = static_cast<int>(*reinterpret_cast<uint8_t*>(tmp));
+      break;
+    case PLYPropertyType::Short:
+      endian_swap_2(tmp);
+      count = static_cast<int>(*reinterpret_cast<int16_t*>(tmp));
+      break;
+    case PLYPropertyType::UShort:
+      endian_swap_2(tmp);
+      count = static_cast<int>(*reinterpret_cast<uint16_t*>(tmp));
+      break;
+    case PLYPropertyType::Int:
+      endian_swap_4(tmp);
+      count = *reinterpret_cast<int*>(tmp);
+      break;
+    case PLYPropertyType::UInt:
+      endian_swap_4(tmp);
+      count = static_cast<int>(*reinterpret_cast<uint32_t*>(tmp));
+      break;
+    default:
+      m_valid = false;
+      return false;
+    }
+
+    if (count < 0) {
+      m_valid = false;
+      return false;
+    }
+
+    const size_t numBytes = kPLYPropertySize[uint32_t(prop.type)];
+
+    size_t back = prop.listData.size();
+    prop.rowStart.push_back(static_cast<uint32_t>(back));
+    prop.rowCount.push_back(static_cast<uint32_t>(count));
+    prop.listData.resize(back + numBytes * size_t(count));
+    if (fread(prop.listData.data() + back, numBytes, size_t(count), m_f) == size_t(count)) {
+      const uint8_t* listEnd = prop.listData.data() + prop.listData.size();
+      uint8_t* listPos = prop.listData.data() + back;
+      switch (numBytes) {
+      case 2:
+        for (; listPos < listEnd; listPos += numBytes) {
+          endian_swap_2(listPos);
+        }
+        break;
+      case 4:
+        for (; listPos < listEnd; listPos += numBytes) {
+          endian_swap_4(listPos);
+        }
+        break;
+      case 8:
+        for (; listPos < listEnd; listPos += numBytes) {
+          endian_swap_8(listPos);
+        }
+        break;
+      default:
+        break;
+      }
+      return true;
+    }
+    else {
+      m_valid = false;
+      return false;
+    }
+  }
+
+
+  bool PLYReader::ascii_value(PLYPropertyType propType, uint8_t value[8])
+  {
+    int tmpInt = 0;
+
+    switch (propType) {
+    case PLYPropertyType::Char:
+    case PLYPropertyType::UChar:
+    case PLYPropertyType::Short:
+    case PLYPropertyType::UShort:
+      m_valid = int_literal(&tmpInt) && advance();
+      break;
+    case PLYPropertyType::Int:
+    case PLYPropertyType::UInt:
+      m_valid = int_literal(reinterpret_cast<int*>(value)) && advance();
+      break;
+    case PLYPropertyType::Float:
+      m_valid = float_literal(reinterpret_cast<float*>(value)) && advance();
+      break;
+    case PLYPropertyType::Double:
+    default:
+      m_valid = double_literal(reinterpret_cast<double*>(value)) && advance();
+      break;
+    }
+
+    if (!m_valid) {
+      return false;
+    }
+
+    switch (propType) {
+    case PLYPropertyType::Char:
+      reinterpret_cast<int8_t*>(value)[0] = static_cast<int8_t>(tmpInt);
+      break;
+    case PLYPropertyType::UChar:
+      value[0] = static_cast<uint8_t>(tmpInt);
+      break;
+    case PLYPropertyType::Short:
+      reinterpret_cast<int16_t*>(value)[0] = static_cast<int16_t>(tmpInt);
+      break;
+    case PLYPropertyType::UShort:
+      reinterpret_cast<uint16_t*>(value)[0] = static_cast<uint16_t>(tmpInt);
+      break;
+    default:
+      break;
+    }
+    return true;
+  }
+
+
+  //
+  // PLYMesh public methods
+  //
+
+  TriangleMesh* PLYMesh::triangle_mesh() const
+  {
+    PLYReader reader(filename);
+    if (!reader.valid()) {
+      return nullptr;
+    }
+
+//    fprintf(stderr, "Opening PLY mesh %s\n", filename);
+
+    TriangleMesh* trimesh = new TriangleMesh();
+    bool gotVerts = false;
+    bool gotIndices = false;
+    while (reader.has_element()) {
+      const PLYElement* elem = reader.element();
+      if (strcmp(elem->name.c_str(), "vertex") == 0) {
+        if (!reader.load_element()) {
+          break; // failed to load data for this element.
+        }
+
+        // TODO: load ply vertex data.
+
+        gotVerts = true;
+        if (gotVerts && gotIndices) {
+          break;
+        }
+      }
+      else if (strcmp(elem->name.c_str(), "face") == 0) {
+        if (!reader.load_element()) {
+          break; // failed to load data for this element.
+        }
+
+        // TODO: load ply face data
+
+        gotIndices = true;
+        if (gotVerts && gotIndices) {
+          break;
+        }
+      }
+      reader.next_element();
+    }
+
+    if (!gotVerts || !gotIndices) {
+      delete trimesh;
+      return nullptr;
+    }
+
+    trimesh->shapeToWorld = shapeToWorld;
+    trimesh->object = object;
+    trimesh->areaLight = areaLight;
+    trimesh->insideMedium = insideMedium;
+    trimesh->outsideMedium = outsideMedium;
+    trimesh->reverseOrientation = reverseOrientation;
+    trimesh->alpha = alpha;
+    trimesh->shadowalpha = shadowalpha;
+    return trimesh;
+  }
+
+
+  //
   // Scene public methods
   //
 
@@ -1580,6 +2766,44 @@ namespace minipbrt {
     for (Medium* medium : mediums) {
       delete medium;
     }
+  }
+
+
+  bool Scene::to_triangle_mesh(uint32_t shapeIndex)
+  {
+    assert(shapeIndex < shapes.size());
+
+    TriangleMesh* trimesh = shapes[shapeIndex]->triangle_mesh();
+    if (trimesh != nullptr) {
+      delete shapes[shapeIndex];
+      shapes[shapeIndex] = trimesh;
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
+
+
+  bool Scene::shapes_to_triangle_mesh(Bits<ShapeType> typesToConvert)
+  {
+    for (Shape*& shape : shapes) {
+      if (typesToConvert.contains(shape->type())) {
+        TriangleMesh* trimesh = shape->triangle_mesh();
+        if (trimesh == nullptr) {
+          return false;
+        }
+        delete shape;
+        shape = trimesh;
+      }
+    }
+    return true;
+  }
+
+
+  bool Scene::load_all_ply_meshes()
+  {
+    return shapes_to_triangle_mesh(ShapeType::PLYMesh);
   }
 
 
@@ -1885,7 +3109,7 @@ namespace minipbrt {
     m_includeDepth++;
 
     FileData* fdata = &m_fileData[m_includeDepth];
-    fdata->filename = copy_string(filename);
+    fdata->filename = copy_string(realname);
     fdata->f = f;
     fdata->atEOF = false;
     fdata->reportEOF = reportEOF;
@@ -2021,139 +3245,14 @@ namespace minipbrt {
   bool Tokenizer::int_literal(int* val)
   {
     m_end = m_pos;
-
-    bool negative = false;
-    if (*m_end == '-') {
-      negative = true;
-      ++m_end;
-    }
-    else if (*m_end == '+') {
-      ++m_end;
-    }
-
-    bool hasLeadingZeroes = *m_end == '0';
-    if (hasLeadingZeroes) {
-      do {
-        ++m_end;
-      } while (*m_end == '0');
-    }
-
-    int numDigits = 0;
-    int localVal = 0;
-    while (is_digit(*m_end)) {
-      // FIXME: this will overflow if we get too many digits.
-      localVal = localVal * 10 + static_cast<int>(*m_end - '0');
-      ++numDigits;
-      ++m_end;
-    }
-
-    if (numDigits == 0 && hasLeadingZeroes) {
-      numDigits = 1;
-    }
-
-    if (numDigits == 0 || is_letter(*m_end) || *m_end == '.' || *m_end == '_') {
-      set_error("Integer has trailing chars");
-      return false;
-    }
-    else if (numDigits > 10) {
-      // Overflow, literal value is larger than an int can hold.
-      // FIXME: this won't catch *all* cases of overflow, make it exact.
-      set_error("Integer literal is too large to store in a 32-bit signed int");
-      return false;
-    }
-
-    if (val != nullptr) {
-      *val = negative ? -localVal : localVal;
-    }
-    return true;
+    return minipbrt::int_literal(m_pos, &m_end, val);
   }
 
 
   bool Tokenizer::float_literal(float* val)
   {
     m_end = m_pos;
-
-    bool negative = false;
-    if (*m_end == '-') {
-      negative = true;
-      ++m_end;
-    }
-    else if (*m_end == '+') {
-      ++m_end;
-    }
-
-    double localVal = 0.0;
-
-    bool hasIntDigits = is_digit(*m_end);
-    if (hasIntDigits) {
-      do {
-        localVal = localVal * 10.0 + kDoubleDigits[*m_end - '0'];
-        ++m_end;
-      } while (is_digit(*m_end));
-    }
-    else if (*m_end != '.') {
-      set_error("Not a floating point number");
-      return false;
-    }
-
-    bool hasFracDigits = false;
-    if (*m_end == '.') {
-      ++m_end;
-      hasFracDigits = is_digit(*m_end);
-      if (hasFracDigits) {
-        double scale = 0.1;
-        do {
-          localVal += scale * kDoubleDigits[*m_end - '0'];
-          scale *= 0.1;
-          ++m_end;
-        } while (is_digit(*m_end));
-      }
-      else if (!hasIntDigits) {
-        set_error("Floating point number has no digits before or after the decimal point");
-        return false;
-      }
-    }
-
-    bool hasExponent = *m_end == 'e' || *m_end == 'E';
-    if (hasExponent) {
-      ++m_end;
-      bool negativeExponent = false;
-      if (*m_end == '-') {
-        negativeExponent = true;
-        ++m_end;
-      }
-      else if (*m_end == '+') {
-        ++m_end;
-      }
-
-      if (!is_digit(*m_end)) {
-        set_error("Floating point exponent has no digits");
-        return false; // error: exponent part has no digits.
-      }
-
-      double exponent = 0.0;
-      do {
-        exponent = exponent * 10.0 + kDoubleDigits[*m_end - '0'];
-        ++m_end;
-      } while (is_digit(*m_end));
-
-      if (val != nullptr) {
-        if (negativeExponent) {
-          exponent = -exponent;
-        }
-        localVal *= std::pow(10.0, exponent);
-      }
-    }
-
-    if (*m_end == '.' || *m_end == '_' || is_alnum(*m_end)) {
-      set_error("Floating point number has trailing chars");
-      return false;
-    }
-
-    if (val != nullptr) {
-      *val = static_cast<float>(localVal);
-    }
-    return true;
+    return minipbrt::float_literal(m_pos, &m_end, val);
   }
 
 
@@ -2199,17 +3298,11 @@ namespace minipbrt {
   bool Tokenizer::which_directive(uint32_t *index)
   {
     for (uint32_t i = 0; i < kNumStatements; i++) {
-      m_end = m_pos;
-      const char* str = kStatements[i].name;
-      while (*m_end == *str && *str != '\0') {
-        ++m_end;
-        ++str;
-      }
-      if (*str == '\0' && !is_keyword_part(*m_end)) {
+      if (match_keyword(kStatements[i].name, m_pos, &m_end)) {
         if (index != nullptr) {
           *index = i;
-          return true;
         }
+        return true;
       }
     }
     return false;
@@ -2219,30 +3312,8 @@ namespace minipbrt {
   bool Tokenizer::which_type(uint32_t *index)
   {
     for (uint32_t i = 0; i < kNumParamTypes; i++) {
-      m_end = m_pos;
-      const char* str = kParamTypes[i].name;
-      while (*m_end == *str && *str != '\0') {
-        ++m_end;
-        ++str;
-      }
-      if (*str == '\0' && !is_keyword_part(*m_end)) {
-        if (index != nullptr) {
-          *index = i;
-          return true;
-        }
-      }
-
-      if (kParamTypes[i].alias == nullptr) {
-        continue;
-      }
-
-      m_end = m_pos;
-      str = kParamTypes[i].alias;
-      while (*m_end == *str && *str != '\0') {
-        ++m_end;
-        ++str;
-      }
-      if (*str == '\0' && !is_keyword_part(*m_end)) {
+      if (match_keyword(kParamTypes[i].name, m_pos, &m_end) ||
+          (kParamTypes[i].alias != nullptr && match_keyword(kParamTypes[i].alias, m_pos, &m_end))) {
         if (index != nullptr) {
           *index = i;
           return true;
@@ -2256,13 +3327,7 @@ namespace minipbrt {
   bool Tokenizer::match_symbol(const char *str)
   {
     assert(str != nullptr);
-
-    m_end = m_pos;
-    while (*m_end == *str && *str != '\0') {
-      ++m_end;
-      ++str;
-    }
-    return (*str == '\0');
+    return match_chars(str, m_pos, &m_end);
   }
 
 
@@ -2499,6 +3564,12 @@ namespace minipbrt {
     Scene* scene = m_scene;
     m_scene = nullptr;
     return scene;
+  }
+
+
+  Scene* Parser::borrow_scene()
+  {
+    return m_scene;
   }
 
 
@@ -3146,7 +4217,7 @@ namespace minipbrt {
     case ShapeType::PLYMesh: // plymesh
       {
         PLYMesh* plymesh = new PLYMesh();
-        if (!string_param("filename", &plymesh->filename, true)) {
+        if (!filename_param("filename", &plymesh->filename)) {
           m_tokenizer.set_error("Required parameter \"filename\" is missing.");
           delete plymesh;
           return false;
@@ -4596,6 +5667,26 @@ namespace minipbrt {
 
     char* src = reinterpret_cast<char*>(m_temp.data() + paramDesc->offset);
     *dest = copy ? copy_string(src) : src;
+    return true;
+  }
+
+
+  bool Parser::filename_param(const char *name, char **dest)
+  {
+    char* tmp = nullptr;
+    if (!string_param(name, &tmp)) {
+      return false;
+    }
+    if (dest == nullptr) {
+      return true;
+    }
+
+    const size_t realnameMax = 1024;
+    char realname[realnameMax];
+    if (!resolve_file(tmp, m_tokenizer.get_filename(), realname, realnameMax)) {
+      return false;
+    }
+    *dest = copy_string(realname);
     return true;
   }
 

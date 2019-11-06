@@ -21,8 +21,8 @@ tris or quads), but it *could* come up so parsing isn't truly correct without
 it.
 
 
-Nice to have (improvements thaat don't affect correctness)
-----------------------------------------------------------
+Nice to have (improvements that don't affect correctness)
+---------------------------------------------------------
 
 Add functions for converting other shapes into a TriangleMesh:
 [ ] Cone
@@ -63,3 +63,17 @@ Optional callback-based parsing interface
 * Separate the existing scene construction code into a SceneBuilder class,
   Parser should only invoke callbacks. SceneBuilder should be the default 
   callback handler.
+
+Reduce memory usage while parsing large attribute values, e.g. the vertex and
+index arrays for a large triangle mesh.
+
+Reduce memory usage for the in-memory scene representation:
+- Transforms are represented by a pair of matrices, but we only need one
+  matrix if the scene isn't animated.
+- Try using a packed (compressed?) representation, with decoding done in
+  accessor methods?
+- Use a disk cache.
+
+Improve IO performance:
+- Use a background and/or async I/O calls to load the next buffer while
+  parsing the current buffer.

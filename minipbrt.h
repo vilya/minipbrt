@@ -1561,6 +1561,7 @@ namespace minipbrt {
     bool advance_to_symbol(const char* str);
 
     const char* get_filename() const;
+    const char* get_original_filename() const;
 
     void set_error(const char* fmt, ...);
     bool has_error() const;

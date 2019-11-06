@@ -815,6 +815,8 @@ namespace minipbrt {
     uint32_t                 count      = 0;       //!< The number of items in this element (e.g. the number of vertices if this is the vertex element).
     bool                     fixedSize  = true;    //!< `true` if there are only fixed-size properties in this element, i.e. no list properties.
     uint32_t                 rowStride  = 0;
+
+    uint32_t find_property(const char* propName) const;
   };
 
 
@@ -829,6 +831,11 @@ namespace minipbrt {
     const PLYElement* element() const;
     bool load_element();
     void next_element();
+
+    bool has_vec2(const char* xname, const char* yname) const;
+    bool has_vec3(const char* xname, const char* yname, const char* zname) const;
+    bool extract_vec2(const char* xname, const char* yname, float* dest) const;
+    bool extract_vec3(const char* xname, const char* yname, const char* zname, float* dest) const;
 
   private:
     bool refill_buffer();
@@ -933,7 +940,8 @@ namespace minipbrt {
 
   static inline bool is_safe_buffer_end(char ch)
   {
-    return is_whitespace(ch) || ch == '\n';
+    return (ch > 0 && ch <= 32) || (ch >= 127);
+//    return is_whitespace(ch) || ch == '\n';
   }
 
 
@@ -1921,6 +1929,21 @@ namespace minipbrt {
 
 
   //
+  // PLYElement methods
+  //
+
+  uint32_t PLYElement::find_property(const char *propName) const
+  {
+    for (uint32_t i = 0, endI = uint32_t(properties.size()); i < endI; i++) {
+      if (strcmp(propName, properties.at(i).name.c_str()) == 0) {
+        return i;
+      }
+    }
+    return kInvalidIndex;
+  }
+
+
+  //
   // PLYReader methods
   //
 
@@ -1932,6 +1955,8 @@ namespace minipbrt {
     m_bufEnd = m_buf + kPLYReadBufferSize;
     m_pos = m_bufEnd;
     m_end = m_bufEnd;
+
+//    fprintf(stderr, "PLY file %s\n", filename);
 
     if (fopen_s(&m_f, filename, "rb") != 0) {
       m_f = nullptr;
@@ -1947,24 +1972,21 @@ namespace minipbrt {
               typed_which(kPLYFileTypes, &m_fileType) && advance() &&
               int_literal(&m_majorVersion) && advance() &&
               match(".") && advance() &&
-              int_literal(&m_minorVersion) && next_line();
-    m_valid = m_valid &&
+              int_literal(&m_minorVersion) && next_line() &&
               parse_elements() &&
-              keyword("end_header") && advance() && match("\n");
+              keyword("end_header") && advance() && match("\n") &&
+              (m_fileType != PLYFileType::ASCII || advance());
     if (!m_valid) {
-      return;
-    }
-
-    if (m_fileType == PLYFileType::BinaryBigEndian) {
-      // TODO: add support for the binary big-endian version of the format.
-      m_valid = false;
       return;
     }
 
     // If we got here, the file is a valid PLY. We may have read past the end
     // of the header when filling our buffer for parsing, so we need to move
-    // the file pointer to the right offset.
-    file_seek(m_f, m_bufOffset + int64_t(m_end - m_buf), SEEK_SET);
+    // the file pointer to the right offset (if we're going to parse binary
+    // data, that is).
+    if (m_fileType != PLYFileType::ASCII) {
+      file_seek(m_f, m_bufOffset + int64_t(m_end - m_buf), SEEK_SET);
+    }
 
     for (PLYElement& elem : m_elements) {
       setup_element(elem);
@@ -2020,12 +2042,195 @@ namespace minipbrt {
   }
 
 
+  bool PLYReader::has_vec2(const char* xname, const char* yname) const
+  {
+    assert(has_element());
+    const PLYElement* elem = element();
+    return (elem->find_property(xname) != kInvalidIndex) &&
+           (elem->find_property(yname) != kInvalidIndex);
+  }
+
+
+  bool PLYReader::has_vec3(const char* xname, const char* yname, const char* zname) const
+  {
+    assert(has_element());
+    const PLYElement* elem = element();
+    return (elem->find_property(xname) != kInvalidIndex) &&
+           (elem->find_property(yname) != kInvalidIndex) &&
+           (elem->find_property(zname) != kInvalidIndex);
+  }
+
+
+  static float to_float(PLYPropertyType type, const uint8_t* tmp)
+  {
+    switch (type) {
+    case PLYPropertyType::Char:
+      return static_cast<float>(*reinterpret_cast<const int8_t*>(tmp));
+    case PLYPropertyType::UChar:
+      return static_cast<float>(*reinterpret_cast<const uint8_t*>(tmp));
+    case PLYPropertyType::Short:
+      return static_cast<float>(*reinterpret_cast<const int16_t*>(tmp));
+    case PLYPropertyType::UShort:
+      return static_cast<float>(*reinterpret_cast<const uint16_t*>(tmp));
+    case PLYPropertyType::Int:
+      return static_cast<float>(*reinterpret_cast<const int*>(tmp));
+    case PLYPropertyType::UInt:
+      return static_cast<float>(*reinterpret_cast<const uint32_t*>(tmp));
+    case PLYPropertyType::Float:
+      return *reinterpret_cast<const float*>(tmp);
+    case PLYPropertyType::Double:
+      return static_cast<float>(*reinterpret_cast<const double*>(tmp));
+    default:
+      return 0.0f;
+    }
+  }
+
+
+  bool PLYReader::extract_vec2(const char* xname, const char* yname, float* dest) const
+  {
+    assert(has_element());
+
+    const PLYElement* elem = element();
+    uint32_t xidx = elem->find_property(xname);
+    uint32_t yidx = elem->find_property(yname);
+    if (xidx == kInvalidIndex || yidx == kInvalidIndex) {
+      return false;
+    }
+
+    const PLYProperty& x = elem->properties[xidx];
+    const PLYProperty& y = elem->properties[yidx];
+    if (x.countType != PLYPropertyType::None || y.countType != PLYPropertyType::None) {
+      return false;
+    }
+
+    // In order from fastest to slowest:
+    // 1. if x and y are contiguous floats and are the only properties in this element, use a single memcpy.
+    // 2. if x and y are contiguous floats, do 1 memcpy per row.
+    // 3. if x and y are both floats, do 2 memcpys per row.
+    // 4. if x and y are not both floats, then do 2 type conversions and assignments per row
+    if (x.type == PLYPropertyType::Float &&
+        y.type == PLYPropertyType::Float) {
+      // x and y are both floats, could be any of cases 1, 2 or 3.
+      if (y.offset == (x.offset + sizeof(float))) {
+        // x and y are contiguous floats, could be either case 1 or case 2
+        if (elem->properties.size() == 2) {
+          // case 1
+          std::memcpy(dest, m_elementData.data(), sizeof(float) * elem->count * 2);
+        }
+        else {
+          // case 2
+          const uint8_t* src = m_elementData.data() + x.offset;
+          const uint8_t* srcEnd = m_elementData.data() + m_elementData.size();
+          for (; src < srcEnd; src += elem->rowStride) {
+            std::memcpy(dest, src, sizeof(float) * 2);
+            dest += 2;
+          }
+        }
+      }
+      else {
+        // x and y are not contiguous --> case 3
+        const uint8_t* row = m_elementData.data();
+        const uint8_t* rowEnd = m_elementData.data() + m_elementData.size();
+        for (; row < rowEnd; row += elem->rowStride) {
+          dest[0] = *reinterpret_cast<const float*>(row + x.offset);
+          dest[1] = *reinterpret_cast<const float*>(row + y.offset);
+          dest += 2;
+        }
+      }
+    }
+    else {
+      // either x, y or both are not floats --> case 4
+      const uint8_t* row = m_elementData.data();
+      const uint8_t* rowEnd = m_elementData.data() + m_elementData.size();
+      for (; row < rowEnd; row += elem->rowStride) {
+        dest[0] = to_float(x.type, row + x.offset);
+        dest[1] = to_float(y.type, row + y.offset);
+        dest += 2;
+      }
+    }
+    return true;
+  }
+
+
+  bool PLYReader::extract_vec3(const char* xname, const char* yname, const char* zname, float* dest) const
+  {
+    assert(has_element());
+
+    const PLYElement* elem = element();
+    uint32_t xidx = elem->find_property(xname);
+    uint32_t yidx = elem->find_property(yname);
+    uint32_t zidx = elem->find_property(zname);
+    if (xidx == kInvalidIndex || yidx == kInvalidIndex || zidx == kInvalidIndex) {
+      return false;
+    }
+
+    const PLYProperty& x = elem->properties[xidx];
+    const PLYProperty& y = elem->properties[yidx];
+    const PLYProperty& z = elem->properties[zidx];
+    if (x.countType != PLYPropertyType::None || y.countType != PLYPropertyType::None || z.countType != PLYPropertyType::None) {
+      return false;
+    }
+
+    // In order from fastest to slowest:
+    // 1. if xyz are contiguous floats and are the only properties in this element, use a single memcpy.
+    // 2. if xyz are contiguous floats, do 1 memcpy per row.
+    // 3. if xyz are all floats, do 3 memcpys per row.
+    // 4. if xyz are not all floats, then do 3 type conversions and assignments per row
+    if (x.type == PLYPropertyType::Float &&
+        y.type == PLYPropertyType::Float &&
+        z.type == PLYPropertyType::Float) {
+      // xyz are all floats, could be any of cases 1, 2 or 3.
+      if (y.offset == (x.offset + sizeof(float)) && z.offset == (y.offset + sizeof(float))) {
+        // xyz are contiguous floats, could be either case 1 or case 2
+        if (elem->properties.size() == 3) {
+          // case 1
+          std::memcpy(dest, m_elementData.data(), sizeof(float) * elem->count * 3);
+        }
+        else {
+          // case 2
+          const uint8_t* src = m_elementData.data() + x.offset;
+          const uint8_t* srcEnd = m_elementData.data() + m_elementData.size();
+          for (; src < srcEnd; src += elem->rowStride) {
+            std::memcpy(dest, src, sizeof(float) * 3);
+            dest += 3;
+          }
+        }
+      }
+      else {
+        // x and y are not contiguous --> case 3
+        const uint8_t* row = m_elementData.data();
+        const uint8_t* rowEnd = m_elementData.data() + m_elementData.size();
+        for (; row < rowEnd; row += elem->rowStride) {
+          dest[0] = *reinterpret_cast<const float*>(row + x.offset);
+          dest[1] = *reinterpret_cast<const float*>(row + y.offset);
+          dest[2] = *reinterpret_cast<const float*>(row + z.offset);
+          dest += 3;
+        }
+      }
+    }
+    else {
+      // either x, y or both are not floats --> case 4
+      const uint8_t* row = m_elementData.data();
+      const uint8_t* rowEnd = m_elementData.data() + m_elementData.size();
+      for (; row < rowEnd; row += elem->rowStride) {
+        dest[0] = to_float(x.type, row + x.offset);
+        dest[1] = to_float(y.type, row + y.offset);
+        dest[1] = to_float(z.type, row + z.offset);
+        dest += 3;
+      }
+    }
+    return true;
+  }
+
+
   //
   // PLYReader private methods
   //
 
   bool PLYReader::refill_buffer()
   {
+//    fprintf(stderr, "refill buffer\n");
+
     if (m_f == nullptr || m_atEOF) {
       // Nothing left to read.
       return false;
@@ -2058,7 +2263,12 @@ namespace minipbrt {
     // next refill will pick up the whole of the token.
     if (!m_atEOF && !is_safe_buffer_end(m_bufEnd[-1])) {
       const char* safe = m_bufEnd - 2;
-      while (safe >= m_end && !is_safe_buffer_end(*safe)) {
+      // If '\n' is the last char in the buffer, then a call to `next_line()`
+      // will move `m_pos` to point at the null terminator but won't refresh
+      // the buffer. It would be clearer to fix this in `next_line()` but I
+      // believe it'll be more performant to simply treat `\n` as an unsafe
+      // character here.
+      while (safe >= m_end && (*safe == '\n' || !is_safe_buffer_end(*safe))) {
         --safe;
       }
       if (safe < m_end) {
@@ -2312,7 +2522,6 @@ namespace minipbrt {
             m_valid = false;
             return false;
           }
-          back += kPLYPropertySize[uint32_t(prop.type)];
         }
         next_line();
       }
@@ -2325,7 +2534,7 @@ namespace minipbrt {
         return false;
       }
 
-      // We assume the CPU is aa little endian, so if the file is big-endian we
+      // We assume the CPU is little endian, so if the file is big-endian we
       // need to do an endianness swap on every data item in the block.
       if (m_fileType == PLYFileType::BinaryBigEndian) {
         uint8_t* data = m_elementData.data();
@@ -2681,12 +2890,44 @@ namespace minipbrt {
     bool gotIndices = false;
     while (reader.has_element()) {
       const PLYElement* elem = reader.element();
-      if (strcmp(elem->name.c_str(), "vertex") == 0) {
+      if (!gotVerts && strcmp(elem->name.c_str(), "vertex") == 0) {
         if (!reader.load_element()) {
           break; // failed to load data for this element.
         }
 
-        // TODO: load ply vertex data.
+
+        trimesh->P = new float[elem->count * 3];
+        if (!reader.extract_vec3("x", "y", "z", trimesh->P)) {
+          break; // invalid data: vertex data MUST include a position
+        }
+
+        if (reader.has_vec3("nx", "ny", "nz")) {
+          trimesh->N = new float[elem->count * 3];
+          if (!reader.extract_vec3("nx", "ny", "nz", trimesh->N)) {
+            break; // invalid data, couldn't parse normal.
+          }
+        }
+
+        bool ok = true;
+        if (reader.has_vec2("u", "v")) {
+          trimesh->uv = new float[elem->count * 2];
+          ok = reader.extract_vec2("u", "v", trimesh->uv);
+        }
+        else if (reader.has_vec2("s", "t")) {
+          trimesh->uv = new float[elem->count * 2];
+          ok = reader.extract_vec2("s", "t", trimesh->uv);
+        }
+        else if (reader.has_vec2("texture_u", "texture_v")) {
+          trimesh->uv = new float[elem->count * 2];
+          ok = reader.extract_vec2("texture_u", "texture_v", trimesh->uv);
+        }
+        else if (reader.has_vec2("texture_s", "texture_t")) {
+          trimesh->uv = new float[elem->count * 2];
+          ok = reader.extract_vec2("texture_s", "texture_t", trimesh->uv);
+        }
+        if (!ok) {
+          break; // invalid data, couldn't parse tex coords
+        }
 
         gotVerts = true;
         if (gotVerts && gotIndices) {
@@ -3408,6 +3649,12 @@ namespace minipbrt {
   const char* Tokenizer::get_filename() const
   {
     return m_fileData[m_includeDepth].filename;
+  }
+
+
+  const char* Tokenizer::get_original_filename() const
+  {
+    return m_fileData[0].filename;
   }
 
 
@@ -5684,7 +5931,7 @@ namespace minipbrt {
 
     const size_t realnameMax = 1024;
     char realname[realnameMax];
-    if (!resolve_file(tmp, m_tokenizer.get_filename(), realname, realnameMax)) {
+    if (!resolve_file(tmp, m_tokenizer.get_original_filename(), realname, realnameMax)) {
       return false;
     }
     *dest = copy_string(realname);

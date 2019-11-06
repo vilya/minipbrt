@@ -2261,7 +2261,7 @@ namespace minipbrt {
     // If it looks like a token might run past the end of this buffer, move
     // the buffer end pointer back before it & rewind the file. This way the
     // next refill will pick up the whole of the token.
-    if (!m_atEOF && !is_safe_buffer_end(m_bufEnd[-1])) {
+    if (!m_atEOF && (m_bufEnd[-1] == '\n' || !is_safe_buffer_end(m_bufEnd[-1]))) {
       const char* safe = m_bufEnd - 2;
       // If '\n' is the last char in the buffer, then a call to `next_line()`
       // will move `m_pos` to point at the null terminator but won't refresh
@@ -2833,24 +2833,25 @@ namespace minipbrt {
     case PLYPropertyType::UChar:
     case PLYPropertyType::Short:
     case PLYPropertyType::UShort:
-      m_valid = int_literal(&tmpInt) && advance();
+      m_valid = int_literal(&tmpInt);
       break;
     case PLYPropertyType::Int:
     case PLYPropertyType::UInt:
-      m_valid = int_literal(reinterpret_cast<int*>(value)) && advance();
+      m_valid = int_literal(reinterpret_cast<int*>(value));
       break;
     case PLYPropertyType::Float:
-      m_valid = float_literal(reinterpret_cast<float*>(value)) && advance();
+      m_valid = float_literal(reinterpret_cast<float*>(value));
       break;
     case PLYPropertyType::Double:
     default:
-      m_valid = double_literal(reinterpret_cast<double*>(value)) && advance();
+      m_valid = double_literal(reinterpret_cast<double*>(value));
       break;
     }
 
     if (!m_valid) {
       return false;
     }
+    advance();
 
     switch (propType) {
     case PLYPropertyType::Char:

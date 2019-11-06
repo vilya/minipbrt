@@ -204,11 +204,7 @@ namespace minipbrt {
 
   static constexpr uint32_t kPLYReadBufferSize = 128 * 1024;
 
-  static constexpr uint32_t kPLYMaxElements   = 256;
-  static constexpr uint32_t kPLYMaxProperties = 256;
-
   static const char* kPLYFileTypes[] = { "ascii", "binary_little_endian", "binary_big_endian", nullptr };
-  static const char* kPLYPropertyTypes[] = { "char", "uchar", "short", "ushort", "int", "uint", "float", "double", nullptr };
   static const uint32_t kPLYPropertySize[]= { 1, 1, 2, 2, 4, 4, 4, 8 };
 
   enum class PLYPropertyType {
@@ -2037,6 +2033,26 @@ namespace minipbrt {
   void PLYReader::next_element()
   {
     if (has_element()) {
+      if (m_elementLoaded) {
+        PLYElement& elem = m_elements[m_currentElement];
+
+        // Clear any temporary storage used for list properties in the current element.
+        for (PLYProperty& prop : elem.properties) {
+          if (prop.countType == PLYPropertyType::None) {
+            continue;
+          }
+          prop.listData.clear();
+          prop.listData.shrink_to_fit();
+          prop.rowCount.clear();
+          prop.rowCount.shrink_to_fit();
+          prop.rowStart.clear();
+          prop.rowStart.shrink_to_fit();
+        }
+
+        // Clear temporary storage for the non-list properties in the current element.
+        m_elementData.clear();
+        m_elementLoaded = false;
+      }
       ++m_currentElement;
     }
   }
@@ -2082,6 +2098,31 @@ namespace minipbrt {
       return static_cast<float>(*reinterpret_cast<const double*>(tmp));
     default:
       return 0.0f;
+    }
+  }
+
+
+  static int to_int(PLYPropertyType type, const uint8_t* tmp)
+  {
+    switch (type) {
+    case PLYPropertyType::Char:
+      return static_cast<int>(*reinterpret_cast<const int8_t*>(tmp));
+    case PLYPropertyType::UChar:
+      return static_cast<int>(*reinterpret_cast<const uint8_t*>(tmp));
+    case PLYPropertyType::Short:
+      return static_cast<int>(*reinterpret_cast<const int16_t*>(tmp));
+    case PLYPropertyType::UShort:
+      return static_cast<int>(*reinterpret_cast<const uint16_t*>(tmp));
+    case PLYPropertyType::Int:
+      return *reinterpret_cast<const int*>(tmp);
+    case PLYPropertyType::UInt:
+      return static_cast<int>(*reinterpret_cast<const uint32_t*>(tmp));
+    case PLYPropertyType::Float:
+      return static_cast<int>(*reinterpret_cast<const float*>(tmp));
+    case PLYPropertyType::Double:
+      return static_cast<int>(*reinterpret_cast<const double*>(tmp));
+    default:
+      return 0;
     }
   }
 
@@ -2510,7 +2551,6 @@ namespace minipbrt {
 
   bool PLYReader::load_fixed_size_element(PLYElement& elem)
   {
-    m_elementData.clear();
     m_elementData.resize(elem.count * elem.rowStride);
 
     if (m_fileType == PLYFileType::ASCII) {
@@ -2567,7 +2607,6 @@ namespace minipbrt {
 
   bool PLYReader::load_variable_size_element(PLYElement& elem)
   {
-    m_elementData.clear();
     m_elementData.resize(elem.count * elem.rowStride);
 
     if (m_fileType == PLYFileType::Binary) {
@@ -2877,6 +2916,209 @@ namespace minipbrt {
   // PLYMesh public methods
   //
 
+  static bool ply_parse_vertex_element(PLYReader& reader, TriangleMesh* trimesh)
+  {
+    const PLYElement* elem = reader.element();
+    trimesh->num_vertices = elem->count;
+    trimesh->P = new float[elem->count * 3];
+    if (!reader.extract_vec3("x", "y", "z", trimesh->P)) {
+      return false; // invalid data: vertex data MUST include a position
+    }
+
+    if (reader.has_vec3("nx", "ny", "nz")) {
+      trimesh->N = new float[elem->count * 3];
+      if (!reader.extract_vec3("nx", "ny", "nz", trimesh->N)) {
+        return false; // invalid data, couldn't parse normal.
+      }
+    }
+
+    bool uvsOK = true;
+    if (reader.has_vec2("u", "v")) {
+      trimesh->uv = new float[elem->count * 2];
+      uvsOK = reader.extract_vec2("u", "v", trimesh->uv);
+    }
+    else if (reader.has_vec2("s", "t")) {
+      trimesh->uv = new float[elem->count * 2];
+      uvsOK = reader.extract_vec2("s", "t", trimesh->uv);
+    }
+    else if (reader.has_vec2("texture_u", "texture_v")) {
+      trimesh->uv = new float[elem->count * 2];
+      uvsOK = reader.extract_vec2("texture_u", "texture_v", trimesh->uv);
+    }
+    else if (reader.has_vec2("texture_s", "texture_t")) {
+      trimesh->uv = new float[elem->count * 2];
+      uvsOK = reader.extract_vec2("texture_s", "texture_t", trimesh->uv);
+    }
+    if (!uvsOK) {
+      return false; // invalid data, couldn't parse tex coords
+    }
+
+    return true;
+  }
+
+
+  static bool ply_parse_face_element(PLYReader& reader, TriangleMesh* trimesh)
+  {
+    // Find the indices property.
+    const PLYElement* elem = reader.element();
+    uint32_t indicesIdx = elem->find_property("vertex_indices");
+    if (indicesIdx == kInvalidIndex) {
+      return false; // missing indices property
+    }
+    const PLYProperty& faces = elem->properties[indicesIdx];
+    if (faces.countType == PLYPropertyType::None) {
+      return false; // invalid indices property, should be a list
+    }
+
+    // Count the number of triangles in the mesh.
+    uint32_t numTriangles = 0;
+    bool allTris = true; // whether all faces are already triangles.
+    bool hasPolys = false; // whether there are any faces with 5 or more verts.
+    for (uint32_t i = 0; i < elem->count; i++) {
+      switch (faces.rowCount[i]) {
+      case 0:
+      case 1:
+      case 2:
+        allTris = false;
+        break;
+      case 3:
+        ++numTriangles;
+        break;
+      case 4:
+        numTriangles += 2;
+        allTris = false;
+        break;
+      default:
+//            numTriangles += faces.rowCount[i] - 2;
+        allTris = false;
+        hasPolys = true;
+        break;
+      }
+    }
+    if (hasPolys) {
+      return false; // FIXME: cannot import faces with 5 or more verts yet.
+    }
+    if (numTriangles == 0) {
+      return false; // can't have a mesh with 0 triangles!
+    }
+
+    // Allocate storage for the indices.
+    trimesh->num_indices = numTriangles * 3;
+    trimesh->indices = new int[trimesh->num_indices];
+
+    // Fill in the indices. From fastest to slowest:
+    // 1. If all faces are triangles and the indices have type Int or UInt, memcpy them all in one go.
+    // 2. If all faces are triangles and the indices are some other type, do 3 type conversions and assignments per face.
+    // 3. If there are some non-triangle faces and the indices are Int or UInt, memcpy contiguous runs of triangles & triang
+    if (allTris) {
+      if (faces.type == PLYPropertyType::Int || faces.type == PLYPropertyType::UInt) {
+        // All faces are triangles and have a type compatible with trimesh indices.
+        std::memcpy(trimesh->indices, faces.listData.data(), sizeof(int) * numTriangles);
+      }
+      else {
+        // All faces are triangles but the indices require type conversion.
+        const uint8_t* src = faces.listData.data();
+        const size_t srcIndexBytes = kPLYPropertySize[uint32_t(faces.type)];
+        for (uint32_t i = 0; i < trimesh->num_indices; i++) {
+          trimesh->indices[i] = to_int(faces.type, src);
+          src += srcIndexBytes;
+        }
+      }
+    }
+    else {
+      if (faces.type == PLYPropertyType::Int || faces.type == PLYPropertyType::UInt) {
+        // Some faces are not triangles but the indices do not require type conversion.
+        // If we find a contiguous run of triangles, we can memcpy them all in one go.
+        // Faces with a different vertex count have to be handled as they occur.
+        int* dst = trimesh->indices;
+        uint32_t triStart = 0;
+        bool wasTri = false;
+        for (uint32_t i = 0; i < elem->count; i++) {
+          uint32_t faceVerts = faces.rowCount[i];
+          if (faceVerts == 3) {
+            if (!wasTri) {
+              triStart = i;
+            }
+            wasTri = true;
+          }
+          else {
+            // If we've come to the end of a run of triangles, copy them all over.
+            if (wasTri) {
+              uint32_t numInts = (i - triStart) * 3;
+              std::memcpy(dst, faces.listData.data() + faces.rowStart[triStart], numInts * sizeof(int));
+              dst += numInts;
+            }
+            wasTri = false;
+
+            if (faceVerts == 4) {
+              const int* src = reinterpret_cast<const int*>(faces.listData.data() + faces.rowStart[i]);
+
+              dst[0] = src[0];
+              dst[1] = src[1];
+              dst[2] = src[3];
+
+              dst[3] = src[2];
+              dst[4] = src[3];
+              dst[5] = src[1];
+
+              dst += 6;
+            }
+            else if (faceVerts > 4) {
+              // TODO: triangulate polygon. Not implemented yet, so skip it for now.
+              continue;
+            }
+            else {
+              // Face is degenerate (less than 3 verts) so we ignore it.
+              continue;
+            }
+          }
+        }
+        // If there is a run of triangles at the end of the faces list,
+        // make sure they're copied too.
+        if (wasTri) {
+          uint32_t numInts = (elem->count - triStart) * 3;
+          std::memcpy(dst, faces.listData.data() + faces.rowStart[triStart], numInts * sizeof(int));
+        }
+      }
+      else {
+        // Some faces are not triangles and the indices require type conversion.
+        const size_t srcIndexBytes = kPLYPropertySize[uint32_t(faces.type)];
+        int* dst = trimesh->indices;
+        int tmp[4];
+        for (uint32_t i = 0; i < elem->count; i++) {
+          uint32_t faceVerts = faces.rowCount[i];
+          if (faceVerts < 3 || faceVerts > 4) {
+            continue;
+          }
+          const uint8_t* src = faces.listData.data() + faces.rowStart[i];
+          for (uint32_t v = 0; v < faceVerts; v++) {
+            tmp[v] = to_int(faces.type, src);
+            src += srcIndexBytes;
+          }
+
+          if (faceVerts == 3) {
+            std::memcpy(dst, tmp, sizeof(int) * 3);
+            dst += 3;
+          }
+          else if (faceVerts == 4) {
+            dst[0] = tmp[0];
+            dst[1] = tmp[1];
+            dst[2] = tmp[3];
+
+            dst[3] = tmp[2];
+            dst[4] = tmp[3];
+            dst[5] = tmp[1];
+            dst += 6;
+          }
+          // TODO: handle faces with more than 4 verts.
+        }
+      }
+    }
+
+    return true;
+  }
+
+
   TriangleMesh* PLYMesh::triangle_mesh() const
   {
     PLYReader reader(filename);
@@ -2888,69 +3130,27 @@ namespace minipbrt {
 
     TriangleMesh* trimesh = new TriangleMesh();
     bool gotVerts = false;
-    bool gotIndices = false;
-    while (reader.has_element()) {
+    bool gotFaces = false;
+    while (reader.has_element() && (!gotVerts || !gotFaces)) {
       const PLYElement* elem = reader.element();
       if (!gotVerts && strcmp(elem->name.c_str(), "vertex") == 0) {
-        if (!reader.load_element()) {
-          break; // failed to load data for this element.
-        }
-
-
-        trimesh->P = new float[elem->count * 3];
-        if (!reader.extract_vec3("x", "y", "z", trimesh->P)) {
-          break; // invalid data: vertex data MUST include a position
-        }
-
-        if (reader.has_vec3("nx", "ny", "nz")) {
-          trimesh->N = new float[elem->count * 3];
-          if (!reader.extract_vec3("nx", "ny", "nz", trimesh->N)) {
-            break; // invalid data, couldn't parse normal.
-          }
-        }
-
-        bool ok = true;
-        if (reader.has_vec2("u", "v")) {
-          trimesh->uv = new float[elem->count * 2];
-          ok = reader.extract_vec2("u", "v", trimesh->uv);
-        }
-        else if (reader.has_vec2("s", "t")) {
-          trimesh->uv = new float[elem->count * 2];
-          ok = reader.extract_vec2("s", "t", trimesh->uv);
-        }
-        else if (reader.has_vec2("texture_u", "texture_v")) {
-          trimesh->uv = new float[elem->count * 2];
-          ok = reader.extract_vec2("texture_u", "texture_v", trimesh->uv);
-        }
-        else if (reader.has_vec2("texture_s", "texture_t")) {
-          trimesh->uv = new float[elem->count * 2];
-          ok = reader.extract_vec2("texture_s", "texture_t", trimesh->uv);
-        }
+        bool ok = reader.load_element() && ply_parse_vertex_element(reader, trimesh);
         if (!ok) {
-          break; // invalid data, couldn't parse tex coords
-        }
-
-        gotVerts = true;
-        if (gotVerts && gotIndices) {
-          break;
-        }
-      }
-      else if (strcmp(elem->name.c_str(), "face") == 0) {
-        if (!reader.load_element()) {
           break; // failed to load data for this element.
         }
-
-        // TODO: load ply face data
-
-        gotIndices = true;
-        if (gotVerts && gotIndices) {
-          break;
+        gotVerts = true;
+      }
+      else if (!gotFaces && strcmp(elem->name.c_str(), "face") == 0) {
+        bool ok = reader.load_element() && ply_parse_face_element(reader, trimesh);
+        if (!ok) {
+          break; // failed to load data for this element.
         }
+        gotFaces = true;
       }
       reader.next_element();
     }
 
-    if (!gotVerts || !gotIndices) {
+    if (!gotVerts || !gotFaces) {
       delete trimesh;
       return nullptr;
     }

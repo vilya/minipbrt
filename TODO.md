@@ -10,10 +10,15 @@ Set up any missing defaults after the scene has been parsed:
 Allow overriding of material params in Shape statements.
 
 Add functions for converting shapes into a TriangleMesh:
-[ ] PLYMesh (loads the file)
+[x] PLYMesh (loads the file)
 [ ] HeightField
 [ ] LoopSubdiv
 [ ] Nurbs
+
+Triangulate faces with more than 4 vertices when loading a PLYMesh. I haven't
+seen this come up in any PBRT scenes yet (PBRT itself only seems to handle
+tris or quads), but it *could* come up so parsing isn't truly correct without
+it.
 
 
 Nice to have (improvements thaat don't affect correctness)
@@ -27,9 +32,6 @@ Add functions for converting other shapes into a TriangleMesh:
 [ ] Hyperboloid
 [ ] Paraboloid
 [ ] Sphere
-
-Simpler parsing interface:
-* A `pbrt_load_file()` function which returns a Scene pointer.
 
 Remove all hard-coded limits on string length:
 * We use a lot of locally-declared char arrays as temp storage for strings,
@@ -52,8 +54,6 @@ Factor out checks for required params into a function.
 Code clean-up:
 * Merge the tokenizer class into the parser class.
 * Move as much as possible out of the header and into the cpp file.
-* Inline all parse_Xxx functions which only do simple processing (e.g.
-  `parse_Identity()`, `parse_TransformBegin()`, etc).
 * Make `set_error()` return bool so it can be used as part of a return statement.
 * Remove any unused code.
 
@@ -63,7 +63,3 @@ Optional callback-based parsing interface
 * Separate the existing scene construction code into a SceneBuilder class,
   Parser should only invoke callbacks. SceneBuilder should be the default 
   callback handler.
-
-Performance comparisons:
-* With PBRT's own parser
-* With Ingo Wald's library

@@ -202,7 +202,7 @@ namespace minipbrt {
   // PLY constants
   //
 
-  static constexpr uint32_t kPLYReadBufferSize = 32 * 1024;
+  static constexpr uint32_t kPLYReadBufferSize = 128 * 1024;
 
   static constexpr uint32_t kPLYMaxElements   = 256;
   static constexpr uint32_t kPLYMaxProperties = 256;

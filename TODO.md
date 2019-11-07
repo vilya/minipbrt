@@ -4,9 +4,6 @@ TO DO
 Must have (parser is not correct without them)
 ----------------------------------------------
 
-Set up any missing defaults after the scene has been parsed:
-* e.g. Camera params which depend on the Film settings
-
 Allow overriding of material params in Shape statements.
 
 Add functions for converting shapes into a TriangleMesh:
@@ -70,10 +67,11 @@ index arrays for a large triangle mesh.
 Reduce memory usage for the in-memory scene representation:
 - Transforms are represented by a pair of matrices, but we only need one
   matrix if the scene isn't animated.
+- Many transform matrices will have a bottom row of 0,0,0,1 - perhaps can we use a 4x3 matrix instead, for those cases?
 - Try using a packed (compressed?) representation, with decoding done in
   accessor methods?
 - Use a disk cache.
 
 Improve IO performance:
-- Use a background and/or async I/O calls to load the next buffer while
+- Use a background thread and/or async I/O calls to load the next buffer while
   parsing the current buffer.

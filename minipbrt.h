@@ -282,12 +282,13 @@ namespace minipbrt {
 
     virtual ~Camera() {}
     virtual CameraType type() const = 0;
+    virtual void compute_defaults(const Film* film) {}
   };
 
 
   struct PerspectiveCamera : public Camera {
-    float frameaspectratio  = 1.0f;
-    float screenwindow[4]   = { -1.0f, 1.0f, -1.0f, 1.0f };
+    float frameaspectratio  = 0.0f; // 0 or less means "compute this from the film resolution"
+    float screenwindow[4]   = { 0.0f, 0.0f, 0.0f, 0.0f }; // endx <= startx or endy <= starty means "compute this from the film resolution"
     float lensradius        = 0.0f;
     float focaldistance     = 1e30f;
     float fov               = 90.0f;
@@ -295,6 +296,7 @@ namespace minipbrt {
 
     virtual ~PerspectiveCamera() override {}
     virtual CameraType type() const override { return CameraType::Perspective; }
+    virtual void compute_defaults(const Film* film) override;
   };
 
 
@@ -306,6 +308,7 @@ namespace minipbrt {
 
     virtual ~OrthographicCamera() override {}
     virtual CameraType type() const override { return CameraType::Orthographic; }
+    virtual void compute_defaults(const Film* film) override;
   };
 
 
@@ -315,6 +318,7 @@ namespace minipbrt {
 
     virtual ~EnvironmentCamera() override {}
     virtual CameraType type() const override { return CameraType::Environment; }
+    virtual void compute_defaults(const Film* film) override;
   };
 
 
@@ -341,6 +345,8 @@ namespace minipbrt {
   struct Film {
     virtual ~Film() {}
     virtual FilmType type() const = 0;
+    virtual float get_aspect_ratio() const = 0;
+    virtual void get_resolution(int& w, int& h) const = 0;
   };
 
 
@@ -355,6 +361,8 @@ namespace minipbrt {
 
     virtual ~ImageFilm() override {}
     virtual FilmType type() const override { return FilmType::Image; }
+    virtual float get_aspect_ratio() const override { return float(xresolution) / float(yresolution); }
+    virtual void get_resolution(int& w, int& h) const override { w = xresolution; h = yresolution; }
   };
 
 
@@ -451,18 +459,20 @@ namespace minipbrt {
   struct Integrator {
     virtual ~Integrator() {}
     virtual IntegratorType type() const = 0;
+    virtual void compute_defaults(const Film* /*film*/) {}
   };
 
 
   struct BDPTIntegrator : public Integrator {
     int maxdepth                            = 5;
-    int pixelbounds[4]                      = { 0, -1, 0, -1 }; // -ve width and height mean "whole image".
+    int pixelbounds[4]                      = { 0, -1, 0, -1 }; // endx <= startx or endy <= starty means "whole image".
     LightSampleStrategy lightsamplestrategy = LightSampleStrategy::Power;
     bool visualizestrategies                = false;
     bool visualizeweights                   = false;
 
     virtual ~BDPTIntegrator() override {}
     virtual IntegratorType type() const override { return IntegratorType::BDPT; }
+    virtual void compute_defaults(const Film* film) override;
   };
   
 
@@ -473,6 +483,7 @@ namespace minipbrt {
 
     virtual ~DirectLightingIntegrator() override {}
     virtual IntegratorType type() const override { return IntegratorType::DirectLighting; }
+    virtual void compute_defaults(const Film* film) override;
   };
 
   
@@ -491,12 +502,13 @@ namespace minipbrt {
 
   struct PathIntegrator : public Integrator {
     int maxdepth                            = 5;
-    int pixelbounds[4]                      = { 0, -1, 0, -1 }; // -ve width and height mean "whole image".
+    int pixelbounds[4]                      = { 0, -1, 0, -1 }; // endx <= startx or endy <= starty means "whole image".
     float rrthreshold                       = 1.0f;
     LightSampleStrategy lightsamplestrategy = LightSampleStrategy::Spatial;
 
     virtual ~PathIntegrator() override {}
     virtual IntegratorType type() const override { return IntegratorType::Path; }
+    virtual void compute_defaults(const Film* film) override;
   };
   
 
@@ -518,27 +530,30 @@ namespace minipbrt {
 
     virtual ~WhittedIntegrator() override {}
     virtual IntegratorType type() const override { return IntegratorType::Whitted; }
+    virtual void compute_defaults(const Film* film) override;
   };
   
 
   struct VolPathIntegrator : public Integrator {
     int maxdepth                            = 5;
-    int pixelbounds[4]                      = { 0, -1, 0, -1 }; // -ve width and height mean "whole image".
+    int pixelbounds[4]                      = { 0, -1, 0, -1 }; // endx < startx or endy < starty means "whole image".
     float rrthreshold                       = 1.0f;
     LightSampleStrategy lightsamplestrategy = LightSampleStrategy::Spatial;
 
     virtual ~VolPathIntegrator() override {}
     virtual IntegratorType type() const override { return IntegratorType::VolPath; }
+    virtual void compute_defaults(const Film* film) override;
   };
   
 
   struct AOIntegrator : public Integrator {
-    int pixelbounds[4]                      = { 0, -1, 0, -1 }; // -ve width and height mean "whole image".
+    int pixelbounds[4]                      = { 0, -1, 0, -1 }; // endx < startx or endy < starty means "whole image".
     bool cossample                          = true;
     int nsamples                            = 64;
 
     virtual ~AOIntegrator() override {}
     virtual IntegratorType type() const override { return IntegratorType::AO; }
+    virtual void compute_defaults(const Film* film) override;
   };
   
 
@@ -1449,7 +1464,6 @@ namespace minipbrt {
     std::vector<Texture*>   textures;
     std::vector<Medium*>    mediums;
 
-
     Scene();
     ~Scene();
 
@@ -1662,6 +1676,8 @@ namespace minipbrt {
     bool parse_PixelFilter();
     bool parse_Sampler();
     bool parse_TransformTimes();
+    bool parse_WorldBegin();
+    bool parse_WorldEnd();
 
     bool parse_material_common(MaterialType materialType, const char* materialName, uint32_t* materialOut); // TODO
 

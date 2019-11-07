@@ -2913,6 +2913,103 @@ namespace minipbrt {
 
 
   //
+  // Camera methods
+  //
+
+  static void compute_camera_defaults(const Film* film, float& frameaspectratio, float screenwindow[4])
+  {
+    if (frameaspectratio <= 0.0f) {
+      frameaspectratio = film->get_aspect_ratio();
+    }
+
+    if (screenwindow[1] <= screenwindow[0] ||
+        screenwindow[3] <= screenwindow[2]) {
+      if (frameaspectratio >= 1.0f) {
+        screenwindow[0] = -frameaspectratio;
+        screenwindow[1] =  frameaspectratio;
+        screenwindow[2] = -1.0f;
+        screenwindow[3] =  1.0f;
+      }
+      else {
+        screenwindow[0] = -1.0f;
+        screenwindow[1] =  1.0f;
+        screenwindow[2] = -frameaspectratio;
+        screenwindow[3] =  frameaspectratio;
+      }
+    }
+  }
+
+
+  void PerspectiveCamera::compute_defaults(const Film* film)
+  {
+    compute_camera_defaults(film, frameaspectratio, screenwindow);
+  }
+
+
+  void OrthographicCamera::compute_defaults(const Film* film)
+  {
+    compute_camera_defaults(film, frameaspectratio, screenwindow);
+  }
+
+
+  void EnvironmentCamera::compute_defaults(const Film* film)
+  {
+    compute_camera_defaults(film, frameaspectratio, screenwindow);
+  }
+
+
+  //
+  // Integrator methods
+  //
+
+  void compute_integrator_pixelbounds(const Film* film, int pixelbounds[4])
+  {
+    if (pixelbounds[1] > pixelbounds[0] && pixelbounds[3] > pixelbounds[2]) {
+      return;
+    }
+    pixelbounds[0] = 0;
+    pixelbounds[2] = 0;
+    film->get_resolution(pixelbounds[1], pixelbounds[2]);
+  }
+
+
+  void BDPTIntegrator::compute_defaults(const Film *film)
+  {
+    compute_integrator_pixelbounds(film, pixelbounds);
+  }
+
+
+  void DirectLightingIntegrator::compute_defaults(const Film *film)
+  {
+    compute_integrator_pixelbounds(film, pixelbounds);
+  }
+
+
+  void PathIntegrator::compute_defaults(const Film *film)
+  {
+    compute_integrator_pixelbounds(film, pixelbounds);
+  }
+
+
+  void WhittedIntegrator::compute_defaults(const Film *film)
+  {
+    compute_integrator_pixelbounds(film, pixelbounds);
+  }
+
+
+  void VolPathIntegrator::compute_defaults(const Film *film)
+  {
+    compute_integrator_pixelbounds(film, pixelbounds);
+  }
+
+
+  void AOIntegrator::compute_defaults(const Film *film)
+  {
+    compute_integrator_pixelbounds(film, pixelbounds);
+  }
+
+
+  //
   // PLYMesh public methods
   //
 
@@ -4035,6 +4132,12 @@ namespace minipbrt {
       return false;
     }
 
+    const size_t kMaxReservedTempSpace = 4 * 1024 * 1024;
+    if (m_temp.capacity() > kMaxReservedTempSpace) {
+      m_temp.resize(kMaxReservedTempSpace);
+      m_temp.shrink_to_fit();
+      fprintf(stderr, "Shrank m_temp to %llu bytes\n", uint64_t(m_temp.capacity()));
+    }
     m_params.clear();
     m_temp.clear();
 
@@ -4081,7 +4184,7 @@ namespace minipbrt {
       case StatementID::TransformBegin:     ok = parse_TransformBegin(); break;
       case StatementID::TransformEnd:       ok = parse_TransformEnd(); break;
       case StatementID::ReverseOrientation: ok = parse_ReverseOrientation(); break;
-      case StatementID::WorldEnd:           ok = true; m_inWorld = false; break;
+      case StatementID::WorldEnd:           ok = parse_WorldEnd(); break;
       case StatementID::Accelerator:        ok = parse_Accelerator(); break;
       case StatementID::Camera:             ok = parse_Camera(); break;
       case StatementID::Film:               ok = parse_Film(); break;
@@ -4089,12 +4192,13 @@ namespace minipbrt {
       case StatementID::PixelFilter:        ok = parse_PixelFilter(); break;
       case StatementID::Sampler:            ok = parse_Sampler(); break;
       case StatementID::TransformTimes:     ok = parse_TransformTimes(); break;
-      case StatementID::WorldBegin:         ok = true; m_inWorld = true; m_transforms->clear(); m_attrs->clear(); break;
+      case StatementID::WorldBegin:         ok = parse_WorldBegin(); break;
     }
 
     if (!ok) {
-      m_tokenizer.set_error("Failed to parse %s", statement.name);
+      m_tokenizer.set_error("Failed to parse %s", statement.name);      
     }
+
     return ok;
   }
 
@@ -5485,7 +5589,7 @@ namespace minipbrt {
     float_param("shutteropen", &camera->shutteropen);
     float_param("shutterclose", &camera->shutterclose);
 
-    // Creating a camera automatically defins the "camera" coordinate system.
+    // Creating a camera automatically defines the "camera" coordinate system.
     m_transforms->coordinateSystem("camera");
 
     if (m_scene->camera != nullptr) {
@@ -5763,6 +5867,67 @@ namespace minipbrt {
   {
     m_scene->startTime = float_arg(0);
     m_scene->endTime = float_arg(1);
+    return true;
+  }
+
+
+  bool Parser::parse_WorldBegin()
+  {
+//    if (m_attrs->entry > 0) {
+//      // Warn about unclosed AttributeBegin
+//    }
+//    else if (m_transforms->entry > 0) {
+//      // Warn about unclosed TransformBegin
+//    }
+
+    m_inWorld = true;
+    m_transforms->clear();
+    m_attrs->clear();
+
+    // Setup defaults for any scene-wide items that haven't been specified.
+    if (m_scene->camera == nullptr) {
+      m_scene->camera = new PerspectiveCamera();
+      save_current_transform_matrices(&m_scene->camera->worldToCamera); // Initialise the camera transform to identity.
+      m_transforms->coordinateSystem("camera");
+    }
+    if (m_scene->sampler == nullptr) {
+      m_scene->sampler = new HaltonSampler();
+    }
+    if (m_scene->film == nullptr) {
+      ImageFilm* film = new ImageFilm();
+      film->filename = copy_string("pbrt.exr");
+      m_scene->film = film;
+    }
+    if (m_scene->filter == nullptr) {
+      m_scene->filter = new BoxFilter();
+    }
+    if (m_scene->integrator == nullptr) {
+      m_scene->integrator = new PathIntegrator();
+    }
+    if (m_scene->accelerator == nullptr) {
+      m_scene->accelerator = new BVHAccelerator();
+    }
+
+    m_scene->camera->compute_defaults(m_scene->film);
+    m_scene->integrator->compute_defaults(m_scene->film);
+    return true;
+  }
+
+
+  bool Parser::parse_WorldEnd()
+  {
+//    if (m_activeObject != kInvalidIndex) {
+//      // Warn about unclosed ObjectBegin
+//    }
+
+//    if (m_attrs->entry > 0) {
+//      // Warn about unclosed AttributeBegin
+//    }
+//    else if (m_transforms->entry > 0) {
+//      // Warn about unclosed TransformBegin
+//    }
+
+    m_inWorld = false;
     return true;
   }
 

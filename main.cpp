@@ -544,7 +544,7 @@ namespace minipbrt {
     triCounts.reserve(scene->shapes.size());
     byteCounts.reserve(scene->shapes.size());
 
-    for (uint32_t i = 0, endI = scene->shapes.size(); i < endI; i++) {
+    for (size_t i = 0, endI = scene->shapes.size(); i < endI; i++) {
       if (scene->shapes[i]->type() != ShapeType::TriangleMesh) {
         continue;
       }

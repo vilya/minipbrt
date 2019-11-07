@@ -5,11 +5,9 @@ Must have (parser is not correct without them)
 ----------------------------------------------
 
 Allow overriding of material params in Shape statements.
-
-Triangulate faces with more than 4 vertices when loading a PLYMesh. I haven't
-seen this come up in any PBRT scenes yet (PBRT itself only seems to handle
-tris or quads), but it *could* come up so parsing isn't truly correct without
-it.
+- Store any unused parameters on the Shape directives
+- Add a method to create an overridden material for the shape given an input
+  material.
 
 
 Nice to have (improvements that don't affect correctness)
@@ -71,3 +69,7 @@ Reduce memory usage for the in-memory scene representation:
 Improve IO performance:
 - Use a background thread and/or async I/O calls to load the next buffer while
   parsing the current buffer.
+- Read variable-sized elements from PLY files more efficiently.
+  - Currently doing two small fread calls *per row*.
+  - Use a similar approach to text parsing: read a chunk of bytes at a time,
+    with handling for rows that cross  chunk boundaries.

@@ -257,7 +257,7 @@ namespace minipbrt {
 
   static constexpr uint32_t kMaxTransformStackEntry = 127;
   static constexpr uint32_t kMaxAttributeStackEntry = 127;
-
+  static constexpr size_t kMaxReservedTempSpace = 4 * 1024 * 1024;
 
   //
   // CIE curves, for converting spectra to RGB. Copied from the PBRT source code.
@@ -670,6 +670,43 @@ namespace minipbrt {
   };
 
   static const float CIE_Y_integral = 106.856895f;
+
+
+  //
+  // Vec2 type
+  //
+
+  struct Vec2 {
+    float x, y;
+  };
+
+  static inline Vec2 operator + (Vec2 lhs, Vec2 rhs) { return Vec2{ lhs.x + rhs.x, lhs.y + rhs.y }; }
+  static inline Vec2 operator - (Vec2 lhs, Vec2 rhs) { return Vec2{ lhs.x - rhs.x, lhs.y - rhs.y }; }
+  static inline Vec2 operator * (Vec2 lhs, Vec2 rhs) { return Vec2{ lhs.x * rhs.x, lhs.y * rhs.y }; }
+  static inline Vec2 operator / (Vec2 lhs, Vec2 rhs) { return Vec2{ lhs.x / rhs.x, lhs.y / rhs.y }; }
+
+  static inline float dot(Vec2 lhs, Vec2 rhs) { return lhs.x * rhs.x + lhs.y * rhs.y; }
+  static inline float length(Vec2 v) { return std::sqrt(dot(v, v)); }
+  static inline Vec2 normalize(Vec2 v) { float len = length(v); return Vec2{ v.x / len, v.y / len }; }
+
+
+  //
+  // Vec3 type
+  //
+
+  struct Vec3 {
+    float x, y, z;
+  };
+
+  Vec3 operator + (Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z }; }
+  Vec3 operator - (Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z }; }
+  Vec3 operator * (Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z }; }
+  Vec3 operator / (Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z }; }
+
+  static inline float dot(Vec3 lhs, Vec3 rhs) { return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z; }
+  static inline float length(Vec3 v) { return std::sqrt(dot(v, v)); }
+  static inline Vec3 normalize(Vec3 v) { float len = length(v); return Vec3{ v.x / len, v.y / len, v.z / len }; }
+  static inline Vec3 cross(Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.y * rhs.z - lhs.z * rhs.y, lhs.z * rhs.x - lhs.x * rhs.z, lhs.x * rhs.y - lhs.y * rhs.x }; }
 
 
   //
@@ -3167,6 +3204,107 @@ namespace minipbrt {
   }
 
 
+  static float angle_at_vert(uint32_t idx,
+                             const std::vector<Vec2>& points2D,
+                             const std::vector<uint32_t>& prev,
+                             const std::vector<uint32_t>& next)
+  {
+    Vec2 xaxis = normalize(points2D[next[idx]] - points2D[idx]);
+    Vec2 yaxis = Vec2{-xaxis.y, xaxis.x};
+    Vec2 p2p0 = points2D[prev[idx]] - points2D[idx];
+    float angle = std::atan2(dot(p2p0, yaxis), dot(p2p0, xaxis));
+    if (angle <= 0.0f || angle >= kPi) {
+      angle = 10000.0f;
+    }
+    return angle;
+  }
+
+
+  static uint32_t triangulate_polygon(uint32_t n, const float pos[], const int indices[], int dst[])
+  {
+    if (n < 3) {
+      return 0;
+    }
+    else if (n == 3) {
+      dst[0] = indices[0];
+      dst[1] = indices[1];
+      dst[2] = indices[2];
+      return 1;
+    }
+    else if (n == 4) {
+      dst[0] = indices[0];
+      dst[1] = indices[1];
+      dst[2] = indices[3];
+
+      dst[3] = indices[2];
+      dst[4] = indices[3];
+      dst[5] = indices[1];
+      return 2;
+    }
+
+    const Vec3* vpos = reinterpret_cast<const Vec3*>(pos);
+
+    // Calculate the geometric normal of the face
+    Vec3 origin = vpos[indices[0]];
+    Vec3 faceU = normalize(vpos[indices[1]] - origin);
+    Vec3 faceNormal = normalize(cross(faceU, normalize(vpos[indices[n - 1]] - origin)));
+    Vec3 faceV = normalize(cross(faceNormal, faceU));
+
+    // Project the faces points onto the plane perpendicular to the normal.
+    std::vector<Vec2> points2D(n, Vec2{0.0f, 0.0f});
+    for (uint32_t i = 1; i < n; i++) {
+      Vec3 p = vpos[indices[i]] - origin;
+      points2D[i] = Vec2{dot(p, faceU), dot(p, faceV)};
+    }
+
+    std::vector<uint32_t> next(n, 0u);
+    std::vector<uint32_t> prev(n, 0u);
+    uint32_t first = 0;
+    for (uint32_t i = 0, j = n - 1; i < n; i++) {
+      next[j] = i;
+      prev[i] = j;
+      j = i;
+    }
+
+    // Do ear clipping.
+    while (n > 3) {
+      // Find the (remaining) vertex with the sharpest angle.
+      uint32_t bestI = first;
+      float bestAngle = angle_at_vert(first, points2D, prev, next);
+      for (uint32_t i = next[first]; i != first; i = next[i]) {
+        float angle = angle_at_vert(i, points2D, prev, next);
+        if (angle < bestAngle) {
+          bestI = i;
+          bestAngle = angle;
+        }
+      }
+
+      // Clip the triangle at bestI.
+      uint32_t nextI = next[bestI];
+      uint32_t prevI = prev[bestI];
+
+      dst[0] = indices[bestI];
+      dst[1] = indices[nextI];
+      dst[2] = indices[prevI];
+      dst += 3;
+
+      if (bestI == first) {
+        first = nextI;
+      }
+      next[prevI] = nextI;
+      prev[nextI] = prevI;
+      --n;
+    }
+
+    // Add the final triangle.
+    dst[0] = indices[first];
+    dst[1] = indices[next[first]];
+    dst[2] = indices[prev[first]];
+
+    return n - 2;
+  }
+
+
   static bool ply_parse_face_element(PLYReader& reader, TriangleMesh* trimesh)
   {
     // Find the indices property.
@@ -3183,7 +3321,6 @@ namespace minipbrt {
     // Count the number of triangles in the mesh.
     uint32_t numTriangles = 0;
     bool allTris = true; // whether all faces are already triangles.
-    bool hasPolys = false; // whether there are any faces with 5 or more verts.
     for (uint32_t i = 0; i < elem->count; i++) {
       switch (faces.rowCount[i]) {
       case 0:
@@ -3199,14 +3336,10 @@ namespace minipbrt {
         allTris = false;
         break;
       default:
-//            numTriangles += faces.rowCount[i] - 2;
+        numTriangles += faces.rowCount[i] - 2;
         allTris = false;
-        hasPolys = true;
         break;
       }
-    }
-    if (hasPolys) {
-      return false; // FIXME: cannot import faces with 5 or more verts yet.
     }
     if (numTriangles == 0) {
       return false; // can't have a mesh with 0 triangles!
@@ -3260,22 +3393,10 @@ namespace minipbrt {
             }
             wasTri = false;
 
-            if (faceVerts == 4) {
+            if (faceVerts >= 4) {
               const int* src = reinterpret_cast<const int*>(faces.listData.data() + faces.rowStart[i]);
-
-              dst[0] = src[0];
-              dst[1] = src[1];
-              dst[2] = src[3];
-
-              dst[3] = src[2];
-              dst[4] = src[3];
-              dst[5] = src[1];
-
-              dst += 6;
-            }
-            else if (faceVerts > 4) {
-              // TODO: triangulate polygon. Not implemented yet, so skip it for now.
-              continue;
+              uint32_t numTrisAdded = triangulate_polygon(faceVerts, trimesh->P, src, dst);
+              dst += numTrisAdded * 3;
             }
             else {
               // Face is degenerate (less than 3 verts) so we ignore it.
@@ -3294,33 +3415,28 @@ namespace minipbrt {
         // Some faces are not triangles and the indices require type conversion.
         const size_t srcIndexBytes = kPLYPropertySize[uint32_t(faces.type)];
         int* dst = trimesh->indices;
-        int tmp[4];
+        std::vector<int> tmp;
+        tmp.reserve(32);
         for (uint32_t i = 0; i < elem->count; i++) {
           uint32_t faceVerts = faces.rowCount[i];
-          if (faceVerts < 3 || faceVerts > 4) {
+          if (faceVerts < 3) {
             continue;
           }
           const uint8_t* src = faces.listData.data() + faces.rowStart[i];
+          tmp.clear();
           for (uint32_t v = 0; v < faceVerts; v++) {
-            tmp[v] = to_int(faces.type, src);
+            tmp.push_back(to_int(faces.type, src));
             src += srcIndexBytes;
           }
 
           if (faceVerts == 3) {
-            std::memcpy(dst, tmp, sizeof(int) * 3);
+            std::memcpy(dst, tmp.data(), sizeof(int) * 3);
             dst += 3;
           }
-          else if (faceVerts == 4) {
-            dst[0] = tmp[0];
-            dst[1] = tmp[1];
-            dst[2] = tmp[3];
-
-            dst[3] = tmp[2];
-            dst[4] = tmp[3];
-            dst[5] = tmp[1];
-            dst += 6;
+          else {
+            uint32_t numTrisAdded = triangulate_polygon(faceVerts, trimesh->P, tmp.data(), dst);
+            dst += numTrisAdded * 3;
           }
-          // TODO: handle faces with more than 4 verts.
         }
       }
     }
@@ -4245,11 +4361,9 @@ namespace minipbrt {
       return false;
     }
 
-    const size_t kMaxReservedTempSpace = 4 * 1024 * 1024;
     if (m_temp.capacity() > kMaxReservedTempSpace) {
       m_temp.resize(kMaxReservedTempSpace);
       m_temp.shrink_to_fit();
-      fprintf(stderr, "Shrank m_temp to %llu bytes\n", uint64_t(m_temp.capacity()));
     }
     m_params.clear();
     m_temp.clear();

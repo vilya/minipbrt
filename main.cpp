@@ -1,6 +1,7 @@
 // Copyright 2019 Vilya Harvey
 #include "minipbrt.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -29,6 +30,10 @@ namespace minipbrt {
   static void print_materials_summary(const Scene* scene);
   static void print_textures_summary(const Scene* scene);
   static void print_mediums_summary(const Scene* scene);
+
+  static void print_triangle_mesh_summary(const Scene* scene);
+
+  static uint64_t triangle_mesh_bytes(const TriangleMesh* trimesh);
 
 
   //
@@ -147,6 +152,7 @@ namespace minipbrt {
     print_materials_summary(scene);
     print_textures_summary(scene);
     print_mediums_summary(scene);
+    print_triangle_mesh_summary(scene);
   }
 
 
@@ -519,6 +525,124 @@ namespace minipbrt {
     const char* names[] = { "homogeneous", "heterogeneous", nullptr };
     printf("==== Medium Types ====\n");
     print_histogram_by_type<Medium, N>(scene->mediums, names);
+  }
+
+
+  static void print_triangle_mesh_summary(const Scene* scene)
+  {
+    uint32_t numMeshes = 0;
+
+    uint64_t totalTris = 0;
+    uint64_t totalVerts = 0;
+    uint64_t totalBytes = 0;
+
+    std::vector<uint32_t> vertCounts;
+    std::vector<uint32_t> triCounts;
+    std::vector<uint64_t> byteCounts;
+
+    vertCounts.reserve(scene->shapes.size());
+    triCounts.reserve(scene->shapes.size());
+    byteCounts.reserve(scene->shapes.size());
+
+    for (uint32_t i = 0, endI = scene->shapes.size(); i < endI; i++) {
+      if (scene->shapes[i]->type() != ShapeType::TriangleMesh) {
+        continue;
+      }
+
+      ++numMeshes;
+
+      const TriangleMesh* trimesh = dynamic_cast<const TriangleMesh*>(scene->shapes[i]);
+      uint32_t meshTris = trimesh->num_indices / 3;
+      uint64_t meshBytes = triangle_mesh_bytes(trimesh);
+
+      totalTris += meshTris;
+      totalVerts += trimesh->num_vertices;
+      totalBytes += meshBytes;
+
+      vertCounts.push_back(trimesh->num_vertices);
+      triCounts.push_back(meshTris);
+      byteCounts.push_back(meshBytes);
+    }
+
+    if (numMeshes == 0) {
+      return;
+    }
+
+    if (numMeshes > 1) {
+      std::sort(triCounts.begin(), triCounts.end());
+      std::sort(vertCounts.begin(), vertCounts.end());
+      std::sort(byteCounts.begin(), byteCounts.end());
+    }
+
+    const uint32_t kPrefixCounts = 5;
+    const uint32_t kSuffixCounts = kPrefixCounts;
+    bool abbreviate = (numMeshes > (kPrefixCounts + kSuffixCounts + 1));
+
+    printf("==== Triangle Mesh Info ====\n");
+    printf("\n");
+
+    uint32_t countDigits = uint32_t(ceil(log10(double(triCounts.back()))));
+    printf("Triangle counts:\n");
+    printf("- Min:    %*u\n", countDigits, triCounts.front());
+    printf("- Max:    %*u\n", countDigits, triCounts.back());
+    printf("- Median: %*u\n", countDigits, triCounts[numMeshes / 2]);
+    printf("- Mean:   %*.1lf\n", countDigits + 2, double(totalTris) / double(numMeshes));
+    printf("- Counts:\n");
+    if (abbreviate) {
+      for (uint32_t i = 0; i < kPrefixCounts; i++) {
+        printf("    %*u\n", countDigits, triCounts[i]);
+      }
+      printf("    %*s\n", countDigits, "...");
+      for (uint32_t i = numMeshes - kSuffixCounts; i < numMeshes; i++) {
+        printf("    %*u\n", countDigits, triCounts[i]);
+      }
+    }
+    else {
+      for (uint32_t count : triCounts) {
+        printf("    %*u\n", countDigits, count);
+      }
+    }
+    printf("\n");
+
+    countDigits = uint32_t(ceil(log10(double(vertCounts.back()))));
+    printf("Vertex counts:\n");
+    printf("- Min:    %*u\n", countDigits, vertCounts.front());
+    printf("- Max:    %*u\n", countDigits, vertCounts.back());
+    printf("- Median: %*u\n", countDigits, vertCounts[numMeshes / 2]);
+    printf("- Mean:   %*.1lf\n", countDigits + 2, double(totalVerts) / double(numMeshes));
+    printf("- Counts:\n");
+    if (abbreviate) {
+      for (uint32_t i = 0; i < kPrefixCounts; i++) {
+        printf("    %*u\n", countDigits, vertCounts[i]);
+      }
+      printf("    %*s\n", countDigits, "...");
+      for (uint32_t i = numMeshes - kSuffixCounts; i < numMeshes; i++) {
+        printf("    %*u\n", countDigits, vertCounts[i]);
+      }
+    }
+    else {
+      for (uint32_t count : vertCounts) {
+        printf("    %*u\n", countDigits, count);
+      }
+    }
+    printf("\n");
+  }
+
+
+  static uint64_t triangle_mesh_bytes(const TriangleMesh* trimesh)
+  {
+    uint64_t meshBytes = trimesh->num_indices * sizeof(int) +
+                         trimesh->num_vertices * sizeof(int) * 3;
+    if (trimesh->N != nullptr) {
+      meshBytes += trimesh->num_vertices * sizeof(int) * 3;
+    }
+    if (trimesh->S != nullptr) {
+      meshBytes += trimesh->num_vertices * sizeof(int) * 3;
+    }
+    if (trimesh->uv != nullptr) {
+      meshBytes += trimesh->num_vertices * sizeof(int) * 2;
+    }
+    return meshBytes;
   }
 
 } // namespace minipbrt

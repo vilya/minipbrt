@@ -6,12 +6,6 @@ Must have (parser is not correct without them)
 
 Allow overriding of material params in Shape statements.
 
-Add functions for converting shapes into a TriangleMesh:
-[x] PLYMesh (loads the file)
-[ ] HeightField
-[ ] LoopSubdiv
-[ ] Nurbs
-
 Triangulate faces with more than 4 vertices when loading a PLYMesh. I haven't
 seen this come up in any PBRT scenes yet (PBRT itself only seems to handle
 tris or quads), but it *could* come up so parsing isn't truly correct without
@@ -20,6 +14,8 @@ it.
 
 Nice to have (improvements that don't affect correctness)
 ---------------------------------------------------------
+
+Expose the API for extracting data from PLY files to end users.
 
 Add functions for converting other shapes into a TriangleMesh:
 [ ] Cone

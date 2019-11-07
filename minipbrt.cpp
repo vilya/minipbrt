@@ -3010,6 +3010,119 @@ namespace minipbrt {
 
 
   //
+  // HeightField methods
+  //
+
+  TriangleMesh* HeightField::triangle_mesh() const
+  {
+    TriangleMesh* trimesh = new TriangleMesh();
+
+    trimesh->num_vertices = uint32_t(nu * nv);
+    trimesh->P = new float[trimesh->num_vertices * 3];
+    float* dstP = trimesh->P;
+    const float* srcZ = Pz;
+    for (int v = 0; v < nv; v++) {
+      for (int u = 0; u < nu; u++) {
+        dstP[0] = float(u);
+        dstP[1] = float(v);
+        dstP[2] = *srcZ;
+        dstP += 3;
+        srcZ++;
+      }
+    }
+
+    trimesh->num_indices = uint32_t((nu - 1) * (nv - 1) * 6);
+    trimesh->indices = new int[trimesh->num_indices];
+    int* dst = trimesh->indices;
+    for (int v = 0, endV = nv - 1; v < endV; v++) {
+      for (int u = 0, endU = nu - 1; u < endU; u++) {
+        dst[0] = nu * v + u;
+        dst[1] = dst[0] + nu;
+        dst[2] = dst[0] + 1;
+
+        dst[3] = nu * (v + 1) + (u + 1);
+        dst[4] = dst[3] - nu;
+        dst[5] = dst[3] - 1;
+
+        dst += 6;
+      }
+    }
+
+    return trimesh;
+  }
+
+
+  //
+  // LoopSubdiv methods
+  //
+
+  TriangleMesh* LoopSubdiv::triangle_mesh() const
+  {
+    // For now we just return the control mesh, we don't subdivide it at all.
+
+    TriangleMesh* trimesh = new TriangleMesh();
+
+    trimesh->num_vertices = num_points;
+    trimesh->P = new float[num_points * 3];
+    std::memcpy(trimesh->P, P, sizeof(float) * num_points * 3);
+
+    trimesh->num_indices = num_indices;
+    trimesh->indices = new int[num_indices];
+    std::memcpy(trimesh->indices, indices, sizeof(int) * num_indices);
+
+    return trimesh;
+  }
+
+
+  //
+  // Nurbs methods
+  //
+
+  TriangleMesh* Nurbs::triangle_mesh() const
+  {
+    // For now we just return the control mesh, we don't subdivide it at all.
+
+    TriangleMesh* trimesh = new TriangleMesh();
+
+    trimesh->num_vertices = uint32_t(nu * nv);
+    trimesh->P = new float[trimesh->num_vertices * 3];
+    if (P != nullptr) {
+      std::memcpy(trimesh->P, P, sizeof(float) * trimesh->num_vertices * 3);
+    }
+    else {
+      float* dst = trimesh->P;
+      const float* src = Pw;
+      for (uint32_t i = 0; i < trimesh->num_vertices; i++) {
+        dst[0] = src[0];
+        dst[1] = src[1];
+        dst[2] = src[2];
+        dst += 3;
+        src += 4;
+      }
+    }
+
+    trimesh->num_indices = uint32_t((nu - 1) * (nv - 1) * 6);
+    trimesh->indices = new int[trimesh->num_indices];
+    int* dst = trimesh->indices;
+    for (int v = 0, endV = nv - 1; v < endV; v++) {
+      for (int u = 0, endU = nu - 1; u < endU; u++) {
+        dst[0] = nu * v + u;
+        dst[1] = dst[0] + nu;
+        dst[2] = dst[0] + 1;
+
+        dst[3] = nu * (v + 1) + (u + 1);
+        dst[4] = dst[3] - nu;
+        dst[5] = dst[3] - 1;
+
+        dst += 6;
+      }
+    }
+
+    return trimesh;
+  }
+
+
+  //
   // PLYMesh public methods
   //
 

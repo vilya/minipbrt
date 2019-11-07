@@ -1082,6 +1082,7 @@ namespace minipbrt {
 
     virtual ~HeightField() override { delete Pz; }
     virtual ShapeType type() const override { return ShapeType::HeightField; }
+    virtual TriangleMesh* triangle_mesh() const override;
   };
 
 
@@ -1107,6 +1108,7 @@ namespace minipbrt {
       delete[] P;
     }
     virtual ShapeType type() const override { return ShapeType::LoopSubdiv; }
+    virtual TriangleMesh* triangle_mesh() const override;
   };
 
 
@@ -1131,6 +1133,7 @@ namespace minipbrt {
       delete[] Pw;
     }
     virtual ShapeType type() const override { return ShapeType::Nurbs; }
+    virtual TriangleMesh* triangle_mesh() const override;
   };
 
 

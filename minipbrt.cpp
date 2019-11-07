@@ -33,6 +33,10 @@ SOFTWARE.
 #include <string>
 #include <unordered_map>
 
+#ifndef _WIN32
+#include <errno.h>
+#endif
+
 #define MINIPBRT_STATIC_ARRAY_LENGTH(arr)  static_cast<uint32_t>(sizeof(arr) / sizeof((arr)[0]))
 
 namespace minipbrt {
@@ -1075,6 +1079,16 @@ namespace minipbrt {
   }
 
 
+  static int file_open(FILE** f, const char* filename, const char* mode)
+  {
+  #ifdef _WIN32
+    return fopen_s(f, filename, mode);
+  #else
+    *f = fopen(filename, mode);
+    return (*f != nullptr) ? 0 : errno;
+  #endif
+  }
+
   static inline int64_t file_pos(FILE* file)
   {
   #ifdef _WIN32
@@ -1092,7 +1106,7 @@ namespace minipbrt {
     return _fseeki64(file, offset, origin);
   #else
     static_assert(sizeof(off_t) == sizeof(int64_t), "off_t is not 64 bits.");
-    fseeko(file, offset, origin);
+    return fseeko(file, offset, origin);
   #endif
   }
 
@@ -1991,7 +2005,7 @@ namespace minipbrt {
 
 //    fprintf(stderr, "PLY file %s\n", filename);
 
-    if (fopen_s(&m_f, filename, "rb") != 0) {
+    if (file_open(&m_f, filename, "rb") != 0) {
       m_f = nullptr;
       m_valid = false;
       return;
@@ -3712,7 +3726,7 @@ namespace minipbrt {
     }
 
     FILE* f = nullptr;
-    if (fopen_s(&f, filename, "rb") != 0) {
+    if (file_open(&f, filename, "rb") != 0) {
       set_error("Failed to open %s", filename);
       return false;
     }
@@ -3866,7 +3880,7 @@ namespace minipbrt {
     resolve_file(filename, m_fileData[0].filename, realname, realnameMax);
 
     FILE* f = nullptr;
-    if (fopen_s(&f, realname, "rb") != 0) {
+    if (file_open(&f, realname, "rb") != 0) {
       set_error("Failed to include %s, full path = %s", filename, realname);
       return false;
     }

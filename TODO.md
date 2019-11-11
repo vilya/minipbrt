@@ -4,9 +4,15 @@ TO DO
 Must have (parser is not correct without them)
 ----------------------------------------------
 
+Correct scoping & binding for names (see FILEFORMAT.md for details). In brief:
+* Material and texture mames should be scoped to their enclosing
+  AttributeBegin/AttributeEnd block.
+* No deferred name resolution, resolution is immediate with fallback to a
+  default value if the name is not defined yet.
+
 Allow overriding of material params in Shape statements.
-- Store any unused parameters on the Shape directives
-- Add a method to create an overridden material for the shape given an input
+* Store any unused parameters on the Shape directives
+* Add a method to create an overridden material for the shape given an input
   material.
 
 

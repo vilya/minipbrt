@@ -3436,7 +3436,7 @@ namespace minipbrt {
     }
 
     trimesh->shapeToWorld = shapeToWorld;
-    trimesh->object = object;
+    trimesh->material = material;
     trimesh->areaLight = areaLight;
     trimesh->insideMedium = insideMedium;
     trimesh->outsideMedium = outsideMedium;
@@ -4914,7 +4914,7 @@ namespace minipbrt {
     }
 
     save_current_transform_matrices(&shape->shapeToWorld);
-    shape->object = m_activeObject;
+    shape->material = m_attrs->top->activeMaterial;
     shape->areaLight = m_attrs->top->areaLight;
     shape->insideMedium = m_attrs->top->insideMedium;
     shape->outsideMedium = m_attrs->top->outsideMedium;
@@ -5335,7 +5335,6 @@ namespace minipbrt {
     }
 
     m_tempShapes.clear();
-    m_tempInstances.clear();
 
     Object* object = new Object();
     save_current_transform_matrices(&object->objectToInstance);
@@ -5370,11 +5369,6 @@ namespace minipbrt {
     std::memcpy(object->shapes, m_tempShapes.data(), object->numShapes * sizeof(uint32_t));
     m_tempShapes.clear();
 
-    object->numInstances = static_cast<uint32_t>(m_tempInstances.size());
-    object->instances = new uint32_t[object->numInstances];
-    std::memcpy(object->instances, m_tempInstances.data(), object->numInstances * sizeof(uint32_t));
-    m_tempInstances.clear();
-
     m_activeObject = kInvalidIndex;
     return true;
   }
@@ -5398,15 +5392,11 @@ namespace minipbrt {
     Instance* instance = new Instance();
     save_current_transform_matrices(&instance->instanceToWorld);
     instance->object = object;
-    instance->material = m_attrs->top->activeMaterial;
     instance->areaLight = m_attrs->top->areaLight;
     instance->insideMedium = m_attrs->top->insideMedium;
     instance->outsideMedium = m_attrs->top->outsideMedium;
     instance->reverseOrientation = m_attrs->top->reverseOrientation;
 
-    if (m_activeObject != kInvalidIndex) {
-      m_tempInstances.push_back(static_cast<uint32_t>(m_scene->instances.size()));
-    }
     m_scene->instances.push_back(instance);
     return true;
   }

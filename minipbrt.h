@@ -1010,7 +1010,7 @@ namespace minipbrt {
 
   struct Shape {
     Transform shapeToWorld; // If shape is part of an object, this is the shapeToObject transform.
-    uint32_t object         = kInvalidIndex;
+    uint32_t material       = kInvalidIndex;
     uint32_t areaLight      = kInvalidIndex;
     uint32_t insideMedium   = kInvalidIndex;
     uint32_t outsideMedium  = kInvalidIndex;
@@ -1417,14 +1417,11 @@ namespace minipbrt {
     const char* name = nullptr;
     Transform objectToInstance;
     uint32_t* shapes           = nullptr;
-    uint32_t* instances        = nullptr;
     unsigned int numShapes     = 0;
-    unsigned int numInstances  = 0;
 
     ~Object() {
       delete[] name;
       delete[] shapes;
-      delete[] instances;
     }
   };
 
@@ -1432,7 +1429,6 @@ namespace minipbrt {
   struct Instance {
     Transform instanceToWorld;
     uint32_t object          = kInvalidIndex; //!< The object that this is an instance of.
-    uint32_t material        = kInvalidIndex; //!< The material for this instance. Overrides any material settings on the object.
     uint32_t areaLight       = kInvalidIndex; //!< If non-null, the instance emits light as described by this area light object.
     uint32_t insideMedium    = kInvalidIndex;
     uint32_t outsideMedium   = kInvalidIndex;
@@ -1666,7 +1662,7 @@ namespace minipbrt {
     bool parse_ObjectBegin();
     bool parse_ObjectEnd();
     bool parse_ObjectInstance();
-    bool parse_Texture();           // todo
+    bool parse_Texture();
     bool parse_TransformBegin();
     bool parse_TransformEnd();
     bool parse_ReverseOrientation();
@@ -1680,7 +1676,7 @@ namespace minipbrt {
     bool parse_WorldBegin();
     bool parse_WorldEnd();
 
-    bool parse_material_common(MaterialType materialType, const char* materialName, uint32_t* materialOut); // TODO
+    bool parse_material_common(MaterialType materialType, const char* materialName, uint32_t* materialOut);
 
     bool parse_statement();
     bool parse_args(const StatementDeclaration& statement);
@@ -1749,7 +1745,6 @@ namespace minipbrt {
 
     // Temporary storage for the active object.
     std::vector<uint32_t> m_tempShapes;
-    std::vector<uint32_t> m_tempInstances;
   };
 
 } // namespace minipbrt

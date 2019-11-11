@@ -4,9 +4,6 @@ TO DO
 Must have (parser is not correct without them)
 ----------------------------------------------
 
-Materials can only be set at the Shape level, not the Instance level. We
-currently have this backwards.
-
 Allow overriding of material params in Shape statements.
 * Store any unused parameters on the Shape directives
 * Add a method to create an overridden material for the shape given an input
@@ -75,4 +72,12 @@ Improve IO performance:
 - Read variable-sized elements from PLY files more efficiently.
   - Currently doing two small fread calls *per row*.
   - Use a similar approach to text parsing: read a chunk of bytes at a time,
-    with handling for rows that cross  chunk boundaries.
+    with handling for rows that cross chunk boundaries.
+
+Improved error handling:
+* Currently we stop at the first error & "error" is the only level.
+* Add support for multiple errors.
+* Add support for warnings.
+* Make line number calculation more efficient when we have to do it multiple times:
+  * Currently we count newlines from the start of the file every time
+  * Instead, keep track of the last line number we calculated & its file offset. Count from there instead of the start of the file.

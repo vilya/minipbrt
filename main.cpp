@@ -648,16 +648,52 @@ namespace minipbrt {
 } // namespace minipbrt
 
 
+static bool has_extension(const char* filename, const char* ext)
+{
+  int j = int(strlen(ext));
+  int i = int(strlen(filename)) - j;
+  if (i <= 0 || filename[i - 1] != '.') {
+    return false;
+  }
+  return strcmp(filename + i, ext) == 0;
+}
+
+
 int main(int argc, char** argv)
 {
-  if (argc <= 1) {
+  const int kFilenameBufferLen = 16 * 1024 - 1;
+  char* filenameBuffer = new char[kFilenameBufferLen + 1];
+  filenameBuffer[kFilenameBufferLen] = '\0';
+
+  std::vector<std::string> filenames;
+  for (int i = 1; i < argc; i++) {
+    if (has_extension(argv[i], "txt")) {
+      FILE* f = nullptr;
+      if (fopen_s(&f, argv[i], "r") == 0) {
+        while (fgets(filenameBuffer, kFilenameBufferLen, f)) {
+          filenames.push_back(filenameBuffer);
+          while (filenames.back().back() == '\n') {
+            filenames.back().pop_back();
+          }
+        }
+        fclose(f);
+      }
+      else {
+        fprintf(stderr, "Failed to open %s\n", argv[i]);
+      }
+    }
+    else {
+      filenames.push_back(argv[i]);
+    }
+  }
+
+  if (filenames.empty()) {
     fprintf(stderr, "No input files provided.\n");
     return EXIT_SUCCESS;
   }
-
-  if (argc == 2) {
+  else if (filenames.size() == 1) {
     minipbrt::Parser parser;
-    bool ok = parser.parse(argv[1]);
+    bool ok = parser.parse(filenames.front().c_str());
     bool plyOK = ok ? parser.borrow_scene()->load_all_ply_meshes() : false;
 
     if (!ok) {
@@ -665,7 +701,7 @@ int main(int argc, char** argv)
       return EXIT_FAILURE;
     }
     else if (!plyOK) {
-      fprintf(stderr, "[%s] Failed to load ply meshes.\n", argv[1]);
+      fprintf(stderr, "[%s] Failed to load ply meshes.\n", filenames.front().c_str());
       return EXIT_FAILURE;
     }
     else {
@@ -675,11 +711,8 @@ int main(int argc, char** argv)
   }
   else {
     int width = 0;
-    for (int i = 1; i < argc; i++) {
-      if (argv[i][0] == '-') {
-        continue;
-      }
-      int newWidth = int(strlen(argv[i]));
+    for (const std::string& filename : filenames) {
+      int newWidth = int(filename.size());
       if (newWidth > width) {
         width = newWidth;
       }
@@ -687,15 +720,11 @@ int main(int argc, char** argv)
 
     int numPassed = 0;
     int numFailed = 0;
-    for (int i = 1; i < argc; i++) {
-      if (argv[i][0] == '-') {
-        continue;
-      }
-
+    for (const std::string& filename : filenames) {
       minipbrt::Parser parser;
-      bool ok = parser.parse(argv[i]);
+      bool ok = parser.parse(filename.c_str());
       bool plyOK = ok ? parser.borrow_scene()->load_all_ply_meshes() : false;
-      printf("%-*s  %s", width, argv[i], (ok && plyOK) ? "passed" : "FAILED");
+      printf("%-*s  %s", width, filename.c_str(), (ok && plyOK) ? "passed" : "FAILED");
       if (!ok) {
         const minipbrt::Error* err = parser.get_error();
         printf(" ---> [%s, line %lld, column %lld] %s\n", err->filename(), err->line(), err->column(), err->message());

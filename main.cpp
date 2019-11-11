@@ -115,8 +115,6 @@ namespace minipbrt {
             err->line(),
             err->column(),
             err->message());
-    fprintf(stderr, "~~~~ buffer contents when the error occurred ~~~~\n");
-    fprintf(stderr, "%s\n", err->buffer_contents());
   }
 
 

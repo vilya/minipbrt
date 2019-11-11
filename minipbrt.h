@@ -101,7 +101,6 @@ namespace minipbrt {
   struct ParamTypeDeclaration;
   struct TransformStack;
   struct AttributeStack;
-  struct NameResolver;
 
   // Interfaces
   struct Accelerator;
@@ -1505,7 +1504,6 @@ namespace minipbrt {
     int64_t offset() const;
     int64_t line() const;
     int64_t column() const;
-    const char* buffer_contents() const;
 
     bool has_line_and_column() const;
     void set_line_and_column(int64_t theLine, int64_t theColumn);
@@ -1716,7 +1714,7 @@ namespace minipbrt {
     bool float_array_param(const char* name, ParamType expectedType, uint32_t len, float* dest);
     bool float_vector_param(const char* name, ParamType expectedType, uint32_t *len, float** dest, bool copy);
     bool spectrum_param(const char* name, float dest[3]);
-    bool texture_param(const char* name, uint32_t* dest);
+    bool texture_param(const char* name, TextureData dataType, uint32_t* dest);
     bool float_texture_param(const char* name, FloatTex* dest);
     bool color_texture_param(const char* name, ColorTex* dest);
     bool enum_param(const char* name, const char* values[], int* dest);
@@ -1731,7 +1729,7 @@ namespace minipbrt {
     uint32_t find_object(const char* name) const;
     uint32_t find_medium(const char* name) const;
     uint32_t find_material(const char* name) const;
-    uint32_t find_texture(const char* name) const;
+    uint32_t find_texture(const char* name, TextureData dataType) const;
 
     void push_bytes(void* src, size_t numBytes);
 
@@ -1752,9 +1750,6 @@ namespace minipbrt {
     // Temporary storage for the active object.
     std::vector<uint32_t> m_tempShapes;
     std::vector<uint32_t> m_tempInstances;
-
-    // Name resolution
-    NameResolver* m_nameResolver = nullptr;
   };
 
 } // namespace minipbrt

@@ -109,6 +109,8 @@ Behaviour with undefined names:
 * If a CoordSysTransform directive uses a name that hasn't been defined yet, a
   warning (not an error) is reported and the current transform is left 
   unchanged.
+* If a MediumInterface refers to an undefined medium name, an error is logged
+  but parsing continues and the medium is left undefined.
 
 Redefining names:
 * Redefining a texture or material name causes a warning in PBRT, not an error.

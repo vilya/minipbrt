@@ -4,11 +4,8 @@ TO DO
 Must have (parser is not correct without them)
 ----------------------------------------------
 
-Correct scoping & binding for names (see FILEFORMAT.md for details). In brief:
-* Material and texture mames should be scoped to their enclosing
-  AttributeBegin/AttributeEnd block.
-* No deferred name resolution, resolution is immediate with fallback to a
-  default value if the name is not defined yet.
+Materials can only be set at the Shape level, not the Instance level. We
+currently have this backwards.
 
 Allow overriding of material params in Shape statements.
 * Store any unused parameters on the Shape directives

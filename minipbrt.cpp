@@ -4050,18 +4050,32 @@ namespace minipbrt {
 
   bool Tokenizer::which_string_literal(const char* values[], int* index)
   {
-    char buf[512];
-    if (!string_literal(buf, sizeof(buf))) {
+    if (*m_pos != '"') {
       return false;
     }
-
+    const char* pos = m_pos + 1;
     for (int i = 0; values[i] != nullptr; i++) {
-      if (strcmp(values[i], buf) == 0) {
+      m_end = pos;
+      const char* str = values[i];
+      while (*m_end == *str && *str != '\0') {
+        ++m_end;
+        ++str;
+      }
+      if (*str == '\0' && *m_end == '"') {
         if (index != nullptr) {
           *index = i;
         }
+        ++m_end;
         return true;
       }
+    }
+
+    m_end = pos;
+    while (*m_end != '"' && *m_end != '\0') {
+      ++m_end;
+    }
+    if (*m_end == '\"') {
+      ++m_end;
     }
     return false;
   }

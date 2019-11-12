@@ -1608,7 +1608,10 @@ namespace minipbrt {
   //
 
   typedef Bits<ParamType> ParamTypeSet;
-  static const ParamTypeSet kSpectrumTypes = ParamType::Float | ParamType::RGB | ParamType::XYZ | ParamType::Blackbody | ParamType::Samples;
+  static const ParamTypeSet kSpectrumTypes = ParamType::RGB | ParamType::XYZ | ParamType::Blackbody | ParamType::Samples;
+  static const ParamTypeSet kColorTextureTypes = kSpectrumTypes | ParamType::Texture;
+  static const ParamTypeSet kFloatTextureTypes = ParamType::Float | ParamType::Texture;
+
 
   struct ParamInfo {
     const char* name;
@@ -1677,6 +1680,8 @@ namespace minipbrt {
     bool parse_WorldEnd();
 
     bool parse_material_common(MaterialType materialType, const char* materialName, uint32_t* materialOut);
+    bool parse_material_overrides(const Material* baseMaterial, uint32_t* materialOut);
+    bool has_material_overrides(uint32_t matIdx) const;
 
     bool parse_statement();
     bool parse_args(const StatementDeclaration& statement);
@@ -1701,18 +1706,23 @@ namespace minipbrt {
     const ParamInfo* find_param(const char* name, ParamTypeSet allowedTypes) const;
 
     bool string_param(const char* name, char** dest, bool copy=false);
+    bool string_param_with_default(const char* name, char** dest, const char* defaultVal, bool copy=false);
     bool filename_param(const char* name, char** dest);
     bool bool_param(const char* name, bool* dest);
+    bool bool_param_with_default(const char* name, bool* dest, bool defaultVal);
     bool int_param(const char* name, int* dest);
     bool int_array_param(const char* name, uint32_t len, int* dest);
     bool int_vector_param(const char* name, uint32_t *len, int** dest, bool copy=false);
     bool float_param(const char* name, float* dest);
+    bool float_param_with_default(const char* name, float* dest, float defaultVal);
     bool float_array_param(const char* name, ParamType expectedType, uint32_t len, float* dest);
     bool float_vector_param(const char* name, ParamType expectedType, uint32_t *len, float** dest, bool copy);
     bool spectrum_param(const char* name, float dest[3]);
     bool texture_param(const char* name, TextureData dataType, uint32_t* dest);
     bool float_texture_param(const char* name, FloatTex* dest);
     bool color_texture_param(const char* name, ColorTex* dest);
+    bool float_texture_param_with_default(const char* name, FloatTex* dest, const FloatTex* defaultVal);
+    bool color_texture_param_with_default(const char *name, ColorTex *dest, const ColorTex* defaultVal);
     bool enum_param(const char* name, const char* values[], int* dest);
 
     template <class T>

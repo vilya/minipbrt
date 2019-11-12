@@ -4,15 +4,19 @@ TO DO
 Must have (parser is not correct without them)
 ----------------------------------------------
 
-Allow overriding of material params in Shape statements.
-* Store any unused parameters on the Shape directives
-* Add a method to create an overridden material for the shape given an input
-  material.
+All done!
 
 
 Nice to have (improvements that don't affect correctness)
 ---------------------------------------------------------
 
+Improve performance of material overrides.
+- Currently has a large perf penalty.
+- Does too much work to determine whether the shape overrides its material.
+- Make the "has overrides" test more efficient.
+  - If there are any texture params other than alpha and shadowalpha, it's probably an override.
+  - If there are any spectrum params it's probably an override.
+  
 Expose the API for extracting data from PLY files to end users.
 
 Add functions for converting other shapes into a TriangleMesh:

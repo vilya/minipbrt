@@ -4920,6 +4920,14 @@ namespace minipbrt {
     shape->outsideMedium = m_attrs->top->outsideMedium;
     shape->reverseOrientation = m_attrs->top->reverseOrientation;
 
+    // Check whether the shape is overriding any properties of the active material
+    if (shape->material != kInvalidIndex) {
+      if (has_material_overrides(shape->material)) {
+        const Material* baseMaterial = m_scene->materials[shape->material];
+        parse_material_overrides(baseMaterial, &shape->material);
+      }
+    }
+
     if (m_activeObject != kInvalidIndex) {
       m_tempShapes.push_back(static_cast<uint32_t>(m_scene->shapes.size()));
     }
@@ -5301,6 +5309,396 @@ namespace minipbrt {
     }
     m_scene->materials.push_back(material);
     return true;
+  }
+
+
+  bool Parser::parse_material_overrides(const Material* baseMaterial, uint32_t* materialOut)
+  {
+    Material* material = nullptr;
+
+    switch (baseMaterial->type()) {
+    case MaterialType::Disney:
+      {
+        const DisneyMaterial* src = dynamic_cast<const DisneyMaterial*>(baseMaterial);
+        DisneyMaterial* dst = new DisneyMaterial();
+        color_texture_param_with_default("color",           &dst->color,           &src->color);
+        float_texture_param_with_default("anisotropic",     &dst->anisotropic,     &src->anisotropic);
+        float_texture_param_with_default("clearcoat",       &dst->clearcoat,       &src->clearcoat);
+        float_texture_param_with_default("clearcoatgloss",  &dst->clearcoatgloss,  &src->clearcoatgloss);
+        float_texture_param_with_default("eta",             &dst->eta,             &src->eta);
+        float_texture_param_with_default("metallic",        &dst->metallic,        &src->metallic);
+        float_texture_param_with_default("roughness",       &dst->roughness,       &src->roughness);
+        color_texture_param_with_default("scatterdistance", &dst->scatterdistance, &src->scatterdistance);
+        float_texture_param_with_default("sheen",           &dst->sheen,           &src->sheen);
+        float_texture_param_with_default("sheentint",       &dst->sheentint,       &src->sheentint);
+        float_texture_param_with_default("spectrans",       &dst->spectrans,       &src->spectrans);
+        float_texture_param_with_default("speculartint",    &dst->speculartint,    &src->speculartint);
+        bool_param_with_default         ("thin",            &dst->thin,            src->thin);
+        color_texture_param_with_default("difftrans",       &dst->difftrans,       &src->difftrans);
+        color_texture_param_with_default("flatness",        &dst->flatness,        &src->flatness);
+        material = dst;
+      }
+      break;
+
+    case MaterialType::Fourier:
+      {
+        const FourierMaterial* src = dynamic_cast<const FourierMaterial*>(baseMaterial);
+        FourierMaterial* dst = new FourierMaterial();
+        string_param_with_default("bsdffile", &dst->bsdffile, src->bsdffile, true);
+        material = dst;
+      }
+      break;
+
+    case MaterialType::Glass:
+      {
+        const GlassMaterial* src = dynamic_cast<const GlassMaterial*>(baseMaterial);
+        GlassMaterial* dst = new GlassMaterial();
+        color_texture_param_with_default("Kr",             &dst->Kr,             &src->Kr);
+        color_texture_param_with_default("Kt",             &dst->Kt,             &src->Kt);
+        float_texture_param_with_default("eta",            &dst->eta,            &src->eta);
+        float_texture_param_with_default("uroughness",     &dst->uroughness,     &src->uroughness);
+        float_texture_param_with_default("vroughness",     &dst->vroughness,     &src->vroughness);
+        bool_param_with_default         ("remaproughness", &dst->remaproughness, src->remaproughness);
+        material = dst;
+      }
+      break;
+
+    case MaterialType::Hair:
+      {
+        const HairMaterial* src = dynamic_cast<const HairMaterial*>(baseMaterial);
+        HairMaterial* dst = new HairMaterial();
+        dst->has_sigma_a = color_texture_param("sigma_a", &dst->sigma_a);
+        if (!dst->has_sigma_a && src->has_sigma_a) {
+          dst->sigma_a = src->sigma_a;
+          dst->has_sigma_a = true;
+        }
+        dst->has_color = color_texture_param("color", &dst->color);
+        if (!dst->has_color && src->has_color) {
+          dst->color = src->color;
+          dst->has_color = true;
+        }
+        float_texture_param_with_default("eumelanin",   &dst->eumelanin,   &src->eumelanin);
+        float_texture_param_with_default("pheomelanin", &dst->pheomelanin, &src->pheomelanin);
+        float_texture_param_with_default("eta",         &dst->eta,         &src->eta);
+        float_texture_param_with_default("beta_m",      &dst->beta_m,      &src->beta_m);
+        float_texture_param_with_default("beta_n",      &dst->beta_n,      &src->beta_n);
+        float_texture_param_with_default("alpha",       &dst->alpha,       &src->alpha);
+        material = dst;
+      }
+      break;
+
+    case MaterialType::KdSubsurface:
+      {
+        const KdSubsurfaceMaterial* src = dynamic_cast<const KdSubsurfaceMaterial*>(baseMaterial);
+        KdSubsurfaceMaterial* dst = new KdSubsurfaceMaterial();
+        color_texture_param_with_default("Kd",             &dst->Kd,             &src->Kd);
+        color_texture_param_with_default("mfp",            &dst->mfp,            &src->mfp);
+        float_texture_param_with_default("eta",            &dst->eta,            &src->eta);
+        color_texture_param_with_default("Kr",             &dst->Kr,             &src->Kr);
+        color_texture_param_with_default("Kt",             &dst->Kt,             &src->Kt);
+        float_texture_param_with_default("uroughness",     &dst->uroughness,     &src->uroughness);
+        float_texture_param_with_default("vroughness",     &dst->vroughness,     &src->vroughness);
+        bool_param_with_default         ("remaproughness", &dst->remaproughness, src->remaproughness);
+        material = dst;
+      }
+      break;
+
+    case MaterialType::Matte:
+      {
+        const MatteMaterial* src = dynamic_cast<const MatteMaterial*>(baseMaterial);
+        MatteMaterial* dst = new MatteMaterial();
+        color_texture_param_with_default("Kd",    &dst->Kd,    &src->Kd);
+        float_texture_param_with_default("sigma", &dst->sigma, &src->sigma);
+        material = dst;
+      }
+      break;
+
+    case MaterialType::Metal:
+      {
+        const MetalMaterial* src = dynamic_cast<const MetalMaterial*>(baseMaterial);
+        MetalMaterial* dst = new MetalMaterial();
+        color_texture_param_with_default("eta",        &dst->eta,        &src->eta);
+        color_texture_param_with_default("k",          &dst->k,          &src->k);
+        float_texture_param_with_default("uroughness", &dst->uroughness, &src->uroughness);
+        float_texture_param_with_default("vroughness", &dst->vroughness, &src->vroughness);
+        bool_param("remaproughness",      &dst->remaproughness);
+        material = dst;
+      }
+      break;
+
+    case MaterialType::Mirror:
+      {
+        const MirrorMaterial* src= dynamic_cast<const MirrorMaterial*>(baseMaterial);
+        MirrorMaterial* dst = new MirrorMaterial();
+        color_texture_param_with_default("Kr", &dst->Kr, &src->Kr);
+        material = dst;
+      }
+      break;
+
+    case MaterialType::Mix:
+      {
+        const MixMaterial* src = dynamic_cast<const MixMaterial*>(baseMaterial);
+        MixMaterial* dst = new MixMaterial();
+        color_texture_param_with_default("amount", &dst->amount, &src->amount);
+        
+        char* tmp = nullptr;
+        if (string_param("namedmaterial1", &tmp)) {
+          dst->namedmaterial1 = find_material(tmp);
+        }
+        else {
+          dst->namedmaterial1 = src->namedmaterial1;
+        }
+
+        if (string_param("namedmaterial2", &tmp)) {
+          dst->namedmaterial2 = find_material(tmp);
+        }
+        else {
+          dst->namedmaterial2 = src->namedmaterial2;
+        }
+        material = dst;
+      }
+      break;
+
+    case MaterialType::None:
+      material = new NoneMaterial();
+      break;
+
+    case MaterialType::Plastic:
+      {
+        const PlasticMaterial* src = dynamic_cast<const PlasticMaterial*>(baseMaterial);
+        PlasticMaterial* dst = new PlasticMaterial();
+        color_texture_param_with_default("Kd",            &dst->Kd,             &src->Kd);
+        color_texture_param_with_default("Ks",            &dst->Ks,             &src->Ks);
+        float_texture_param_with_default("roughness",     &dst->roughness,      &src->roughness);
+        bool_param_with_default        ("remaproughness", &dst->remaproughness, src->remaproughness);
+        material = dst;
+      }
+      break;
+
+    case MaterialType::Substrate:
+      {
+        const SubstrateMaterial* src = dynamic_cast<const SubstrateMaterial*>(baseMaterial);
+        SubstrateMaterial* dst = new SubstrateMaterial();
+        color_texture_param_with_default("Kd",         &dst->Kd,             &src->Kd);
+        color_texture_param_with_default("Ks",         &dst->Ks,             &src->Ks);
+        float_texture_param_with_default("uroughness", &dst->uroughness,     &src->uroughness);
+        float_texture_param_with_default("vroughness", &dst->vroughness,     &src->vroughness);
+        bool_param_with_default("remaproughness",      &dst->remaproughness, src->remaproughness);
+        material = dst;
+      }
+      break;
+
+    case MaterialType::Subsurface:
+      {
+        const SubsurfaceMaterial* src = dynamic_cast<const SubsurfaceMaterial*>(baseMaterial);
+        SubsurfaceMaterial* dst = new SubsurfaceMaterial();
+        string_param_with_default("name",                 &dst->coefficients,   src->coefficients, true);
+        color_texture_param_with_default("sigma_a",       &dst->sigma_a,        &src->sigma_a);
+        color_texture_param_with_default("sigma_prime_s", &dst->sigma_prime_s,  &src->sigma_prime_s);
+        float_param_with_default("scale",                 &dst->scale,          src->scale);
+        float_texture_param_with_default("eta",           &dst->eta,            &src->eta);
+        color_texture_param_with_default("Kr",            &dst->Kr,             &src->Kr);
+        color_texture_param_with_default("Kt",            &dst->Kt,             &src->Kt);
+        float_texture_param_with_default("uroughness",    &dst->uroughness,     &src->uroughness);
+        float_texture_param_with_default("vroughness",    &dst->vroughness,     &src->vroughness);
+        bool_param_with_default("remaproughness",         &dst->remaproughness, src->remaproughness);
+        material = dst;
+      }
+      break;
+
+    case MaterialType::Translucent:
+      {
+        const TranslucentMaterial* src = dynamic_cast<const TranslucentMaterial*>(baseMaterial);
+        TranslucentMaterial* dst = new TranslucentMaterial();
+        color_texture_param_with_default("Kd",        &dst->Kd,             &src->Kd);
+        color_texture_param_with_default("Ks",        &dst->Ks,             &src->Ks);
+        color_texture_param_with_default("reflect",   &dst->reflect,        &src->reflect);
+        color_texture_param_with_default("transmit",  &dst->transmit,       &src->transmit);
+        float_texture_param_with_default("roughness", &dst->roughness,      &src->roughness);
+        bool_param_with_default("remaproughness",     &dst->remaproughness, src->remaproughness);
+        material = dst;
+      }
+      break;
+
+    case MaterialType::Uber:
+      {
+        const UberMaterial* src = dynamic_cast<const UberMaterial*>(baseMaterial);
+        UberMaterial* dst = new UberMaterial();
+        color_texture_param_with_default("Kd",         &dst->Kd,             &src->Kd);
+        color_texture_param_with_default("Ks",         &dst->Ks,             &src->Ks);
+        color_texture_param_with_default("reflect",    &dst->Kr,             &src->Kr);
+        color_texture_param_with_default("transmit",   &dst->Kt,             &src->Kt);
+        float_texture_param_with_default("eta",        &dst->eta,            &src->eta);
+        color_texture_param_with_default("opacity",    &dst->opacity,        &src->opacity);
+        float_texture_param_with_default("uroughness", &dst->uroughness,     &src->uroughness);
+        float_texture_param_with_default("vroughness", &dst->vroughness,     &src->vroughness);
+        bool_param_with_default("remaproughness",      &dst->remaproughness, src->remaproughness);
+        material = dst;
+      }
+      break;
+    }
+
+    if (!texture_param("bumpmap", TextureData::Float, &material->bumpmap)) {
+      material->bumpmap = baseMaterial->bumpmap;
+    }
+
+    if (materialOut != nullptr) {
+      *materialOut = uint32_t(m_scene->materials.size());
+    }
+    m_scene->materials.push_back(material);
+
+    return true;
+  }
+
+
+  bool Parser::has_material_overrides(uint32_t matIdx) const
+  {
+    if (matIdx == kInvalidIndex) {
+      return false;
+    }
+
+    const Material* mat = m_scene->materials[matIdx];
+    if (mat == nullptr) {
+      return false;
+    }
+
+    bool found = false;
+
+    switch (mat->type()) {
+    case MaterialType::Disney:
+      found = find_param("color",           kColorTextureTypes) ||
+              find_param("anisotropic",     kFloatTextureTypes) ||
+              find_param("clearcoat",       kFloatTextureTypes) ||
+              find_param("clearcoatgloss",  kFloatTextureTypes) ||
+              find_param("eta",             kFloatTextureTypes) ||
+              find_param("metallic",        kFloatTextureTypes) ||
+              find_param("roughness",       kFloatTextureTypes) ||
+              find_param("scatterdistance", kColorTextureTypes) ||
+              find_param("sheen",           kFloatTextureTypes) ||
+              find_param("sheentint",       kFloatTextureTypes) ||
+              find_param("spectrans",       kFloatTextureTypes) ||
+              find_param("speculartint",    kFloatTextureTypes) ||
+              find_param("thin",            ParamType::Bool   ) ||
+              find_param("difftrans",       kColorTextureTypes) ||
+              find_param("flatness",        kColorTextureTypes);
+      break;
+
+    case MaterialType::Fourier:
+      found = find_param("bsdffile", ParamType::String);
+      break;
+
+    case MaterialType::Glass:
+      found = find_param("Kr",             kColorTextureTypes) ||
+              find_param("Kt",             kColorTextureTypes) ||
+              find_param("eta",            kFloatTextureTypes) ||
+              find_param("uroughness",     kFloatTextureTypes) ||
+              find_param("vroughness",     kFloatTextureTypes) ||
+              find_param("remaproughness", ParamType::Bool   );
+      break;
+
+    case MaterialType::Hair:
+      found = find_param("sigma_a",     kColorTextureTypes) ||
+              find_param("color",       kColorTextureTypes) ||
+              find_param("eumelanin",   kFloatTextureTypes) ||
+              find_param("pheomelanin", kFloatTextureTypes) ||
+              find_param("eta",         kFloatTextureTypes) ||
+              find_param("beta_m",      kFloatTextureTypes) ||
+              find_param("beta_n",      kFloatTextureTypes) ||
+              find_param("alpha",       kFloatTextureTypes);
+      break;
+
+    case MaterialType::KdSubsurface:
+      found = find_param("Kd",             kColorTextureTypes) ||
+              find_param("mfp",            kColorTextureTypes) ||
+              find_param("eta",            kFloatTextureTypes) ||
+              find_param("Kr",             kColorTextureTypes) ||
+              find_param("Kt",             kColorTextureTypes) ||
+              find_param("uroughness",     kFloatTextureTypes) ||
+              find_param("vroughness",     kFloatTextureTypes) ||
+              find_param("remaproughness", ParamType::Bool   );
+      break;
+
+    case MaterialType::Matte:
+      found = find_param("Kd",    kColorTextureTypes) ||
+              find_param("sigma", kFloatTextureTypes);
+      break;
+
+    case MaterialType::Metal:
+      found = find_param("eta",            kColorTextureTypes) ||
+              find_param("k",              kColorTextureTypes) ||
+              find_param("uroughness",     kFloatTextureTypes) ||
+              find_param("vroughness",     kFloatTextureTypes) ||
+              find_param("remaproughness", ParamType::Bool   );
+      break;
+
+    case MaterialType::Mirror:
+      found = find_param("Kr", kColorTextureTypes);
+      break;
+
+    case MaterialType::Mix:
+      found = find_param("amount",         kColorTextureTypes) ||
+              find_param("namedmaterial1", ParamType::String ) ||
+              find_param("namedmaterial2", ParamType::String );
+      break;
+
+    case MaterialType::None:
+      return false;
+
+    case MaterialType::Plastic:
+      found = find_param("Kd",             kColorTextureTypes) ||
+              find_param("Ks",             kColorTextureTypes) ||
+              find_param("roughness",      kFloatTextureTypes) ||
+              find_param("remaproughness", ParamType::Bool   );
+      break;
+
+    case MaterialType::Substrate:
+      found = find_param("Kd",             kColorTextureTypes) ||
+              find_param("Ks",             kColorTextureTypes) ||
+              find_param("uroughness",     kFloatTextureTypes) ||
+              find_param("vroughness",     kFloatTextureTypes) ||
+              find_param("remaproughness", ParamType::Bool   );
+      break;
+
+    case MaterialType::Subsurface:
+      found = find_param("name",           ParamType::String ) ||
+              find_param("sigma_a",        kColorTextureTypes) ||
+              find_param("sigma_prime_s",  kColorTextureTypes) ||
+              find_param("scale",          ParamType::Float  ) ||
+              find_param("eta",            kFloatTextureTypes) ||
+              find_param("Kr",             kColorTextureTypes) ||
+              find_param("Kt",             kColorTextureTypes) ||
+              find_param("uroughness",     kFloatTextureTypes) ||
+              find_param("vroughness",     kFloatTextureTypes) ||
+              find_param("remaproughness", ParamType::Bool);
+      break;
+
+    case MaterialType::Translucent:
+      found = find_param("Kd",             kColorTextureTypes) ||
+              find_param("Ks",             kColorTextureTypes) ||
+              find_param("reflect",        kColorTextureTypes) ||
+              find_param("transmit",       kColorTextureTypes) ||
+              find_param("roughness",      kFloatTextureTypes) ||
+              find_param("remaproughness", ParamType::Bool   );
+      break;
+
+    case MaterialType::Uber:
+      found = find_param("Kd",             kColorTextureTypes) ||
+              find_param("Ks",             kColorTextureTypes) ||
+              find_param("reflect",        kColorTextureTypes) ||
+              find_param("transmit",       kColorTextureTypes) ||
+              find_param("eta",            kFloatTextureTypes) ||
+              find_param("opacity",        kColorTextureTypes) ||
+              find_param("uroughness",     kFloatTextureTypes) ||
+              find_param("vroughness",     kFloatTextureTypes) ||
+              find_param("remaproughness", ParamType::Bool   );
+      break;
+    }
+
+    if (!found) {
+      found = find_param("bumpmap", ParamType::Texture);
+    }
+
+    return found;
   }
 
 
@@ -6396,7 +6794,23 @@ namespace minipbrt {
     }
 
     char* src = reinterpret_cast<char*>(m_temp.data() + paramDesc->offset);
+    if (copy && *dest != nullptr) {
+      delete[] *dest;
+    }
     *dest = copy ? copy_string(src) : src;
+    return true;
+  }
+
+
+  bool Parser::string_param_with_default(const char* name, char** dest, const char* defaultVal, bool copy)
+  {
+    if (string_param(name, dest, copy)) {
+      return true;
+    }
+    if (copy && *dest != nullptr) {
+      delete[] *dest;
+    }
+    *dest = copy ? copy_string(defaultVal) : const_cast<char*>(defaultVal);
     return true;
   }
 
@@ -6432,6 +6846,16 @@ namespace minipbrt {
     }
 
     *dest = *reinterpret_cast<bool*>(m_temp.data() + paramDesc->offset);
+    return true;
+  }
+
+
+  bool Parser::bool_param_with_default(const char *name, bool *dest, bool defaultVal)
+  {
+    if (bool_param(name, dest)) {
+      return true;
+    }
+    *dest = defaultVal;
     return true;
   }
 
@@ -6502,6 +6926,16 @@ namespace minipbrt {
     }
 
     *dest = *reinterpret_cast<float*>(m_temp.data() + paramDesc->offset);
+    return true;
+  }
+
+
+  bool Parser::float_param_with_default(const char* name, float* dest, float defaultVal)
+  {
+    if (float_param(name, dest)) {
+      return true;
+    }
+    *dest = defaultVal;
     return true;
   }
 
@@ -6631,6 +7065,38 @@ namespace minipbrt {
   {
     bool hasTex = texture_param(name, TextureData::Spectrum, &dest->texture);
     bool hasValue = spectrum_param(name, dest->value);
+    return hasTex | hasValue;
+  }
+
+
+  bool Parser::float_texture_param_with_default(const char* name, FloatTex* dest, const FloatTex* defaultVal)
+  {
+    bool hasTex = texture_param(name, TextureData::Float, &dest->texture);
+    if (!hasTex && defaultVal->texture != kInvalidIndex) {
+      dest->texture = defaultVal->texture;
+      hasTex = true;
+    }
+    bool hasValue = float_param(name, &dest->value);
+    if (!hasValue) {
+      dest->value = defaultVal->value;
+      hasValue = true;
+    }
+    return hasTex | hasValue;
+  }
+
+
+  bool Parser::color_texture_param_with_default(const char *name, ColorTex *dest, const ColorTex* defaultVal)
+  {
+    bool hasTex = texture_param(name, TextureData::Spectrum, &dest->texture);
+    if (!hasTex && defaultVal->texture != kInvalidIndex) {
+      dest->texture = defaultVal->texture;
+      hasTex = true;
+    }
+    bool hasValue = spectrum_param(name, dest->value);
+    if (!hasValue) {
+      memcpy(dest->value, defaultVal->value, sizeof(dest->value));
+      hasValue = true;
+    }
     return hasTex | hasValue;
   }
 

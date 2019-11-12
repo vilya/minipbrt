@@ -702,10 +702,10 @@ namespace minipbrt {
     float x, y, z;
   };
 
-  Vec3 operator + (Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z }; }
-  Vec3 operator - (Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z }; }
-  Vec3 operator * (Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z }; }
-  Vec3 operator / (Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z }; }
+  static inline Vec3 operator + (Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z }; }
+  static inline Vec3 operator - (Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z }; }
+  static inline Vec3 operator * (Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z }; }
+  static inline Vec3 operator / (Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z }; }
 
   static inline float dot(Vec3 lhs, Vec3 rhs) { return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z; }
   static inline float length(Vec3 v) { return std::sqrt(dot(v, v)); }
@@ -2275,20 +2275,24 @@ namespace minipbrt {
 
     // Move everything from the start of the current token onwards, to the
     // start of the read buffer.
-    size_t remain = static_cast<size_t>(m_bufEnd - m_pos);
-    if (remain > 0 && m_pos > m_buf) {
-      std::memmove(m_buf, m_pos, sizeof(char) * remain);
+    int64_t bufSize = static_cast<int64_t>(m_bufEnd - m_buf);
+    if (bufSize < kPLYReadBufferSize) {
+      m_buf[bufSize] = m_buf[kPLYReadBufferSize];
+      m_buf[kPLYReadBufferSize] = '\0';
+      m_bufEnd = m_buf + kPLYReadBufferSize;
     }
-    m_bufOffset = file_pos(m_f) - static_cast<int64_t>(remain);
+    size_t keep = static_cast<size_t>(m_bufEnd - m_pos);
+    if (keep > 0 && m_pos > m_buf) {
+      std::memmove(m_buf, m_pos, sizeof(char) * keep);
+      m_bufOffset += static_cast<int64_t>(m_pos - m_buf);
+    }
     m_end = m_buf + (m_end - m_pos);
     m_pos = m_buf;
 
     // Fill the remaining space in the buffer with data from the file.
-    size_t len = fread(m_buf + remain, sizeof(char), kPLYReadBufferSize - remain, m_f);
-    if (len + remain < kPLYReadBufferSize) {
-      m_atEOF = true;
-    }
-    m_bufEnd = m_buf + len;
+    size_t fetched = fread(m_buf + keep, sizeof(char), kPLYReadBufferSize - keep, m_f) + keep;
+    m_atEOF = fetched < kPLYReadBufferSize;
+    m_bufEnd = m_buf + fetched;
 
     // If it looks like a token might run past the end of this buffer, move
     // the buffer end pointer back before it & rewind the file. This way the
@@ -2308,12 +2312,8 @@ namespace minipbrt {
         return false;
       }
       ++safe;
-
-      int64_t offset = static_cast<int64_t>(safe - m_bufEnd);
-      if (offset != 0) {
-        file_seek(m_f, offset, SEEK_CUR);
-        m_bufEnd = safe;
-      }
+      m_buf[kPLYReadBufferSize] = *safe;
+      m_bufEnd = safe;
     }
     m_buf[m_bufEnd - m_buf] = '\0';
 
@@ -3752,37 +3752,41 @@ namespace minipbrt {
       }
     }
 
-    size_t remaining = static_cast<size_t>(m_bufEnd - m_pos);
-    if (remaining > 0 && m_pos > m_buf) {
-      std::memmove(m_buf, m_pos, remaining);
+    // Move everything from the start of the current token onwards, to the
+    // start of the read buffer.
+    size_t bufSize = static_cast<size_t>(m_bufEnd - m_buf);
+    if (bufSize < m_bufCapacity) {
+      m_buf[bufSize] = m_buf[m_bufCapacity];
+      m_buf[m_bufCapacity] = '\0';
+      m_bufEnd = m_buf + m_bufCapacity;
     }
-    fdata->bufOffset = file_pos(fdata->f) - static_cast<int64_t>(remaining);
-    size_t bufLen = remaining + fread(m_buf + remaining, sizeof(char), m_bufCapacity - remaining, fdata->f);
-    m_bufEnd = m_buf + bufLen;
+    size_t keep = static_cast<size_t>(m_bufEnd - m_pos);
+    if (keep > 0 && m_pos > m_buf) {
+      std::memmove(m_buf, m_pos, sizeof(char) * keep);
+      fdata->bufOffset += static_cast<int64_t>(m_pos - m_buf);
+    }
+    m_end = m_buf + (m_end - m_pos);
     m_pos = m_buf;
-    m_end = m_buf + remaining;
-    fdata->atEOF = bufLen < m_bufCapacity;
+
+    size_t fetched = fread(m_buf + keep, sizeof(char), m_bufCapacity - keep, fdata->f) + keep;
+    fdata->atEOF = fetched < m_bufCapacity;
+    m_bufEnd = m_buf + fetched;
 
     // Trim the buffer back to the last non-token char, so that we don't have
     // to worry about tokens being split between two buffers. This means we
     // only need to check for the end-of-buffer condition in `advance()`, so
     // our token parsing methods stay nice and efficient.
     if (!fdata->atEOF) {
-      int64_t offset = 0;
       while (m_bufEnd > m_buf && !is_safe_buffer_end(m_bufEnd[-1])) {
         --m_bufEnd;
-        --offset;
-      }
-      if (offset != 0) {
-        file_seek(fdata->f, offset, SEEK_CUR);
       }
       if (m_bufEnd == m_buf) {
         // Failed to backtrack to last safe char - there's no whitespace or
         // newlines anywhere in the buffer!?!
         return false;
       }
+      m_buf[m_bufCapacity] = *m_bufEnd;
     }
-
     *m_bufEnd = '\0';
 
     return true;
@@ -3826,6 +3830,7 @@ namespace minipbrt {
     fdata->reportEOF = reportEOF;
     fdata->bufOffset = 0;
 
+    m_bufEnd = m_buf + m_bufCapacity;
     m_pos = m_bufEnd;
     m_end = m_bufEnd;
     return refill_buffer();
@@ -3851,6 +3856,7 @@ namespace minipbrt {
     --m_includeDepth;
 
     m_fileData[m_includeDepth].atEOF = false;
+    m_bufEnd = m_buf + m_bufCapacity;
     m_pos = m_bufEnd;
     m_end = m_bufEnd;
     return refill_buffer();

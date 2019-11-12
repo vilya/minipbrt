@@ -5562,25 +5562,34 @@ namespace minipbrt {
       return false;
     }
 
-    bool found = false;
+    // If there are any spectrum-type params, it's almost certainly a material
+    // override. Likewise if there are any texture params other alpha or
+    // shadowalpha.
+    for (const ParamInfo& param : m_params) {
+      if (kSpectrumTypes.contains(param.type)) {
+        return true;
+      }
+      if (param.type == ParamType::Texture && strcmp(param.name, "alpha") != 0 && strcmp(param.name, "shadowalpha") != 0) {
+        return true;
+      }
+    }
 
+    // We've already checked for texture or spectrum types above, so here we
+    // only need to check for the other possible params.
+    bool found = false;
     switch (mat->type()) {
     case MaterialType::Disney:
-      found = find_param("color",           kColorTextureTypes) ||
-              find_param("anisotropic",     kFloatTextureTypes) ||
-              find_param("clearcoat",       kFloatTextureTypes) ||
-              find_param("clearcoatgloss",  kFloatTextureTypes) ||
-              find_param("eta",             kFloatTextureTypes) ||
-              find_param("metallic",        kFloatTextureTypes) ||
-              find_param("roughness",       kFloatTextureTypes) ||
-              find_param("scatterdistance", kColorTextureTypes) ||
-              find_param("sheen",           kFloatTextureTypes) ||
-              find_param("sheentint",       kFloatTextureTypes) ||
-              find_param("spectrans",       kFloatTextureTypes) ||
-              find_param("speculartint",    kFloatTextureTypes) ||
-              find_param("thin",            ParamType::Bool   ) ||
-              find_param("difftrans",       kColorTextureTypes) ||
-              find_param("flatness",        kColorTextureTypes);
+      found = find_param("anisotropic",     ParamType::Float) ||
+              find_param("clearcoat",       ParamType::Float) ||
+              find_param("clearcoatgloss",  ParamType::Float) ||
+              find_param("eta",             ParamType::Float) ||
+              find_param("metallic",        ParamType::Float) ||
+              find_param("roughness",       ParamType::Float) ||
+              find_param("sheen",           ParamType::Float) ||
+              find_param("sheentint",       ParamType::Float) ||
+              find_param("spectrans",       ParamType::Float) ||
+              find_param("speculartint",    ParamType::Float) ||
+              find_param("thin",            ParamType::Bool   );
       break;
 
     case MaterialType::Fourier:
@@ -5588,56 +5597,43 @@ namespace minipbrt {
       break;
 
     case MaterialType::Glass:
-      found = find_param("Kr",             kColorTextureTypes) ||
-              find_param("Kt",             kColorTextureTypes) ||
-              find_param("eta",            kFloatTextureTypes) ||
-              find_param("uroughness",     kFloatTextureTypes) ||
-              find_param("vroughness",     kFloatTextureTypes) ||
+      found = find_param("eta",            ParamType::Float) ||
+              find_param("uroughness",     ParamType::Float) ||
+              find_param("vroughness",     ParamType::Float) ||
               find_param("remaproughness", ParamType::Bool   );
       break;
 
     case MaterialType::Hair:
-      found = find_param("sigma_a",     kColorTextureTypes) ||
-              find_param("color",       kColorTextureTypes) ||
-              find_param("eumelanin",   kFloatTextureTypes) ||
-              find_param("pheomelanin", kFloatTextureTypes) ||
-              find_param("eta",         kFloatTextureTypes) ||
-              find_param("beta_m",      kFloatTextureTypes) ||
-              find_param("beta_n",      kFloatTextureTypes) ||
-              find_param("alpha",       kFloatTextureTypes);
+      found = find_param("eumelanin",   ParamType::Float) ||
+              find_param("pheomelanin", ParamType::Float) ||
+              find_param("eta",         ParamType::Float) ||
+              find_param("beta_m",      ParamType::Float) ||
+              find_param("beta_n",      ParamType::Float) ||
+              find_param("alpha",       ParamType::Float);
       break;
 
     case MaterialType::KdSubsurface:
-      found = find_param("Kd",             kColorTextureTypes) ||
-              find_param("mfp",            kColorTextureTypes) ||
-              find_param("eta",            kFloatTextureTypes) ||
-              find_param("Kr",             kColorTextureTypes) ||
-              find_param("Kt",             kColorTextureTypes) ||
-              find_param("uroughness",     kFloatTextureTypes) ||
-              find_param("vroughness",     kFloatTextureTypes) ||
+      found = find_param("eta",            ParamType::Float) ||
+              find_param("uroughness",     ParamType::Float) ||
+              find_param("vroughness",     ParamType::Float) ||
               find_param("remaproughness", ParamType::Bool   );
       break;
 
     case MaterialType::Matte:
-      found = find_param("Kd",    kColorTextureTypes) ||
-              find_param("sigma", kFloatTextureTypes);
+      found = find_param("sigma", ParamType::Float);
       break;
 
     case MaterialType::Metal:
-      found = find_param("eta",            kColorTextureTypes) ||
-              find_param("k",              kColorTextureTypes) ||
-              find_param("uroughness",     kFloatTextureTypes) ||
-              find_param("vroughness",     kFloatTextureTypes) ||
+      found = find_param("uroughness",     ParamType::Float) ||
+              find_param("vroughness",     ParamType::Float) ||
               find_param("remaproughness", ParamType::Bool   );
       break;
 
     case MaterialType::Mirror:
-      found = find_param("Kr", kColorTextureTypes);
       break;
 
     case MaterialType::Mix:
-      found = find_param("amount",         kColorTextureTypes) ||
-              find_param("namedmaterial1", ParamType::String ) ||
+      found = find_param("namedmaterial1", ParamType::String ) ||
               find_param("namedmaterial2", ParamType::String );
       break;
 
@@ -5645,57 +5641,36 @@ namespace minipbrt {
       return false;
 
     case MaterialType::Plastic:
-      found = find_param("Kd",             kColorTextureTypes) ||
-              find_param("Ks",             kColorTextureTypes) ||
-              find_param("roughness",      kFloatTextureTypes) ||
+      found = find_param("roughness",      ParamType::Float) ||
               find_param("remaproughness", ParamType::Bool   );
       break;
 
     case MaterialType::Substrate:
-      found = find_param("Kd",             kColorTextureTypes) ||
-              find_param("Ks",             kColorTextureTypes) ||
-              find_param("uroughness",     kFloatTextureTypes) ||
-              find_param("vroughness",     kFloatTextureTypes) ||
+      found = find_param("uroughness",     ParamType::Float) ||
+              find_param("vroughness",     ParamType::Float) ||
               find_param("remaproughness", ParamType::Bool   );
       break;
 
     case MaterialType::Subsurface:
       found = find_param("name",           ParamType::String ) ||
-              find_param("sigma_a",        kColorTextureTypes) ||
-              find_param("sigma_prime_s",  kColorTextureTypes) ||
               find_param("scale",          ParamType::Float  ) ||
-              find_param("eta",            kFloatTextureTypes) ||
-              find_param("Kr",             kColorTextureTypes) ||
-              find_param("Kt",             kColorTextureTypes) ||
-              find_param("uroughness",     kFloatTextureTypes) ||
-              find_param("vroughness",     kFloatTextureTypes) ||
+              find_param("eta",            ParamType::Float) ||
+              find_param("uroughness",     ParamType::Float) ||
+              find_param("vroughness",     ParamType::Float) ||
               find_param("remaproughness", ParamType::Bool);
       break;
 
     case MaterialType::Translucent:
-      found = find_param("Kd",             kColorTextureTypes) ||
-              find_param("Ks",             kColorTextureTypes) ||
-              find_param("reflect",        kColorTextureTypes) ||
-              find_param("transmit",       kColorTextureTypes) ||
-              find_param("roughness",      kFloatTextureTypes) ||
+      found = find_param("roughness",      ParamType::Float) ||
               find_param("remaproughness", ParamType::Bool   );
       break;
 
     case MaterialType::Uber:
-      found = find_param("Kd",             kColorTextureTypes) ||
-              find_param("Ks",             kColorTextureTypes) ||
-              find_param("reflect",        kColorTextureTypes) ||
-              find_param("transmit",       kColorTextureTypes) ||
-              find_param("eta",            kFloatTextureTypes) ||
-              find_param("opacity",        kColorTextureTypes) ||
-              find_param("uroughness",     kFloatTextureTypes) ||
-              find_param("vroughness",     kFloatTextureTypes) ||
+      found = find_param("eta",            ParamType::Float) ||
+              find_param("uroughness",     ParamType::Float) ||
+              find_param("vroughness",     ParamType::Float) ||
               find_param("remaproughness", ParamType::Bool   );
       break;
-    }
-
-    if (!found) {
-      found = find_param("bumpmap", ParamType::Texture);
     }
 
     return found;

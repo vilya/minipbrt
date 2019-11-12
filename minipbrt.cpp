@@ -5551,6 +5551,41 @@ namespace minipbrt {
   }
 
 
+  static const char* kFloatParams_DisneyMaterial[]       = { "anisotropic", "clearcoat", "clearcoatgloss", "eta", "metallic", "sheen", "roughness", "sheen", "sheentint", "spectrans", "speculartint", nullptr };
+  static const char* kFloatParams_FourierMaterial[]      = { nullptr };
+  static const char* kFloatParams_GlassMaterial[]        = { "eta", "uroughness", "vroughness", nullptr };
+  static const char* kFloatParams_HairMaterial[]         = { "eumelanin", "pheomelanin", "eta", "beta_m", "beta_n", "alpha", nullptr };
+  static const char* kFloatParams_KdSubsurfaceMaterial[] = { "eta", "uroughness", "vroughness", nullptr };
+  static const char* kFloatParams_MatteMaterial[]        = { "sigma", nullptr };
+  static const char* kFloatParams_MetalMaterial[]        = { "uroughness", "vroughness", nullptr };
+  static const char* kFloatParams_MirrorMaterial[]       = { nullptr };
+  static const char* kFloatParams_MixMaterial[]          = { nullptr };
+  static const char* kFloatParams_NoneMaterial[]         = { nullptr };
+  static const char* kFloatParams_PlasticMaterial[]      = { "roughness", nullptr };
+  static const char* kFloatParams_SubstrateMaterial[]    = { "uroughness", "vroughness", nullptr };
+  static const char* kFloatParams_SubsurfaceMaterial[]   = { "scale", "eta", "uroughness", "vroughness", nullptr };
+  static const char* kFloatParams_TranslucentMaterial[]  = { "roughness", nullptr };
+  static const char* kFloatParams_UberMaterial[]         = { "eta", "uroughness", "vroughness", nullptr };
+
+  static const char** kFloatParamsByMaterial[] = {
+    kFloatParams_DisneyMaterial,
+    kFloatParams_FourierMaterial,
+    kFloatParams_GlassMaterial,
+    kFloatParams_HairMaterial,
+    kFloatParams_KdSubsurfaceMaterial,
+    kFloatParams_MatteMaterial,
+    kFloatParams_MetalMaterial,
+    kFloatParams_MirrorMaterial,
+    kFloatParams_MixMaterial,
+    kFloatParams_NoneMaterial,
+    kFloatParams_PlasticMaterial,
+    kFloatParams_SubstrateMaterial,
+    kFloatParams_SubsurfaceMaterial,
+    kFloatParams_TranslucentMaterial,
+    kFloatParams_UberMaterial,
+  };
+
+
   bool Parser::has_material_overrides(uint32_t matIdx) const
   {
     if (matIdx == kInvalidIndex) {
@@ -5569,111 +5604,39 @@ namespace minipbrt {
       if (kSpectrumTypes.contains(param.type)) {
         return true;
       }
+
       if (param.type == ParamType::Texture && strcmp(param.name, "alpha") != 0 && strcmp(param.name, "shadowalpha") != 0) {
+        return true;
+      }
+
+      if (param.type == ParamType::Float && find_string_in_array(param.name, kFloatParamsByMaterial[uint32_t(mat->type())]) != -1) {
+        return true;
+      }
+
+      if (param.type == ParamType::Bool && strcmp(param.name, "remaproughness") == 0) {
         return true;
       }
     }
 
-    // We've already checked for texture or spectrum types above, so here we
-    // only need to check for the other possible params.
-    bool found = false;
+    // We've already checked for most material parameters above, so here we
+    // only need to check for the few possible remaining params.
     switch (mat->type()) {
     case MaterialType::Disney:
-      found = find_param("anisotropic",     ParamType::Float) ||
-              find_param("clearcoat",       ParamType::Float) ||
-              find_param("clearcoatgloss",  ParamType::Float) ||
-              find_param("eta",             ParamType::Float) ||
-              find_param("metallic",        ParamType::Float) ||
-              find_param("roughness",       ParamType::Float) ||
-              find_param("sheen",           ParamType::Float) ||
-              find_param("sheentint",       ParamType::Float) ||
-              find_param("spectrans",       ParamType::Float) ||
-              find_param("speculartint",    ParamType::Float) ||
-              find_param("thin",            ParamType::Bool   );
-      break;
+      return find_param("thin", ParamType::Bool);
 
     case MaterialType::Fourier:
-      found = find_param("bsdffile", ParamType::String);
-      break;
-
-    case MaterialType::Glass:
-      found = find_param("eta",            ParamType::Float) ||
-              find_param("uroughness",     ParamType::Float) ||
-              find_param("vroughness",     ParamType::Float) ||
-              find_param("remaproughness", ParamType::Bool   );
-      break;
-
-    case MaterialType::Hair:
-      found = find_param("eumelanin",   ParamType::Float) ||
-              find_param("pheomelanin", ParamType::Float) ||
-              find_param("eta",         ParamType::Float) ||
-              find_param("beta_m",      ParamType::Float) ||
-              find_param("beta_n",      ParamType::Float) ||
-              find_param("alpha",       ParamType::Float);
-      break;
-
-    case MaterialType::KdSubsurface:
-      found = find_param("eta",            ParamType::Float) ||
-              find_param("uroughness",     ParamType::Float) ||
-              find_param("vroughness",     ParamType::Float) ||
-              find_param("remaproughness", ParamType::Bool   );
-      break;
-
-    case MaterialType::Matte:
-      found = find_param("sigma", ParamType::Float);
-      break;
-
-    case MaterialType::Metal:
-      found = find_param("uroughness",     ParamType::Float) ||
-              find_param("vroughness",     ParamType::Float) ||
-              find_param("remaproughness", ParamType::Bool   );
-      break;
-
-    case MaterialType::Mirror:
-      break;
+      return find_param("bsdffile", ParamType::String);
 
     case MaterialType::Mix:
-      found = find_param("namedmaterial1", ParamType::String ) ||
-              find_param("namedmaterial2", ParamType::String );
-      break;
-
-    case MaterialType::None:
-      return false;
-
-    case MaterialType::Plastic:
-      found = find_param("roughness",      ParamType::Float) ||
-              find_param("remaproughness", ParamType::Bool   );
-      break;
-
-    case MaterialType::Substrate:
-      found = find_param("uroughness",     ParamType::Float) ||
-              find_param("vroughness",     ParamType::Float) ||
-              find_param("remaproughness", ParamType::Bool   );
-      break;
+      return find_param("namedmaterial1", ParamType::String) ||
+             find_param("namedmaterial2", ParamType::String);
 
     case MaterialType::Subsurface:
-      found = find_param("name",           ParamType::String ) ||
-              find_param("scale",          ParamType::Float  ) ||
-              find_param("eta",            ParamType::Float) ||
-              find_param("uroughness",     ParamType::Float) ||
-              find_param("vroughness",     ParamType::Float) ||
-              find_param("remaproughness", ParamType::Bool);
-      break;
+      return find_param("name", ParamType::String);
 
-    case MaterialType::Translucent:
-      found = find_param("roughness",      ParamType::Float) ||
-              find_param("remaproughness", ParamType::Bool   );
-      break;
-
-    case MaterialType::Uber:
-      found = find_param("eta",            ParamType::Float) ||
-              find_param("uroughness",     ParamType::Float) ||
-              find_param("vroughness",     ParamType::Float) ||
-              find_param("remaproughness", ParamType::Bool   );
-      break;
+    default:
+      return false;
     }
-
-    return found;
   }
 
 
@@ -6967,15 +6930,6 @@ namespace minipbrt {
 
     float* src = reinterpret_cast<float*>(m_temp.data() + paramDesc->offset);
     switch (paramDesc->type) {
-    case ParamType::Float:
-      if (paramDesc->count != 1) {
-        return false;
-      }
-      dest[0] = *src;
-      dest[1] = *src;
-      dest[2] = *src;
-      break;
-
     case ParamType::RGB:
       if (paramDesc->count != 3) {
         return false;

@@ -667,8 +667,8 @@ int main(int argc, char** argv)
   std::vector<std::string> filenames;
   for (int i = 1; i < argc; i++) {
     if (has_extension(argv[i], "txt")) {
-      FILE* f = nullptr;
-      if (fopen_s(&f, argv[i], "r") == 0) {
+      FILE* f = fopen(argv[i], "r");
+      if (f != nullptr) {
         while (fgets(filenameBuffer, kFilenameBufferLen, f)) {
           filenames.push_back(filenameBuffer);
           while (filenames.back().back() == '\n') {

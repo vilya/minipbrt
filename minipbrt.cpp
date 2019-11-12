@@ -853,6 +853,8 @@ namespace minipbrt {
 
   private:
     bool refill_buffer();
+    bool rewind_to_safe_char();
+    bool accept();
     bool advance();
     bool next_line();
     bool match(const char* str);
@@ -894,6 +896,7 @@ namespace minipbrt {
     const char* m_bufEnd  = nullptr;
     const char* m_pos     = nullptr;
     const char* m_end     = nullptr;
+    bool m_inDataSection  = false;
     bool m_atEOF          = false;
     int64_t m_bufOffset   = 0;
 
@@ -1961,18 +1964,13 @@ namespace minipbrt {
               match(".") && advance() &&
               int_literal(&m_minorVersion) && next_line() &&
               parse_elements() &&
-              keyword("end_header") && advance() && match("\n") &&
-              (m_fileType != PLYFileType::ASCII || advance());
+              keyword("end_header") && advance() && match("\n") && accept();
     if (!m_valid) {
       return;
     }
-
-    // If we got here, the file is a valid PLY. We may have read past the end
-    // of the header when filling our buffer for parsing, so we need to move
-    // the file pointer to the right offset (if we're going to parse binary
-    // data, that is).
-    if (m_fileType != PLYFileType::ASCII) {
-      file_seek(m_f, m_bufOffset + int64_t(m_end - m_buf), SEEK_SET);
+    m_inDataSection = true;
+    if (m_fileType == PLYFileType::ASCII) {
+      advance();
     }
 
     for (PLYElement& elem : m_elements) {
@@ -2023,28 +2021,209 @@ namespace minipbrt {
 
   void PLYReader::next_element()
   {
-    if (has_element()) {
-      if (m_elementLoaded) {
-        PLYElement& elem = m_elements[m_currentElement];
+    if (!has_element()) {
+      return;
+    }
 
-        // Clear any temporary storage used for list properties in the current element.
-        for (PLYProperty& prop : elem.properties) {
+    // If the element was loaded, the read buffer should already be positioned at
+    // the start of the next element.
+    PLYElement& elem = m_elements[m_currentElement];
+    m_currentElement++;
+
+    if (m_elementLoaded) {
+      // Clear any temporary storage used for list properties in the current element.
+      for (PLYProperty& prop : elem.properties) {
+        if (prop.countType == PLYPropertyType::None) {
+          continue;
+        }
+        prop.listData.clear();
+        prop.listData.shrink_to_fit();
+        prop.rowCount.clear();
+        prop.rowCount.shrink_to_fit();
+        prop.rowStart.clear();
+        prop.rowStart.shrink_to_fit();
+      }
+
+      // Clear temporary storage for the non-list properties in the current element.
+      m_elementData.clear();
+      m_elementLoaded = false;
+      return;
+    }
+
+    // If the element wasn't loaded, we have to move the file pointer past its
+    // contents. How we do that depends on whether this is an ASCII or binary
+    // file and, if it's a binary, whether the element is fixed or variable
+    // size.
+    if (m_fileType == PLYFileType::ASCII) {
+      for (uint32_t row = 0; row < elem.count; row++) {
+        next_line();
+      }
+    }
+    else if (elem.fixedSize) {
+      int64_t elementStart = static_cast<int64_t>(m_pos - m_buf);
+      int64_t elementSize = elem.rowStride * elem.count;
+      int64_t elementEnd = elementStart + elementSize;
+      if (elementEnd >= kPLYReadBufferSize) {
+        m_bufOffset += elementEnd;
+        file_seek(m_f, m_bufOffset, SEEK_SET);
+        m_bufEnd = m_buf + kPLYReadBufferSize;
+        m_pos = m_bufEnd;
+        m_end = m_bufEnd;
+        refill_buffer();
+      }
+      else {
+        m_pos = m_buf + elementEnd;
+        m_end = m_pos;
+      }
+    }
+    else if (m_fileType == PLYFileType::Binary) {
+      for (uint32_t row = 0; row < elem.count; row++) {
+        for (const PLYProperty& prop : elem.properties) {
           if (prop.countType == PLYPropertyType::None) {
+            uint32_t numBytes = kPLYPropertySize[uint32_t(prop.type)];
+            if (m_pos + numBytes > m_bufEnd) {
+              if (!refill_buffer() || m_pos + numBytes > m_bufEnd) {
+                m_valid = false;
+                return;
+              }
+            }
+            m_pos += numBytes;
+            m_end = m_pos;
             continue;
           }
-          prop.listData.clear();
-          prop.listData.shrink_to_fit();
-          prop.rowCount.clear();
-          prop.rowCount.shrink_to_fit();
-          prop.rowStart.clear();
-          prop.rowStart.shrink_to_fit();
-        }
 
-        // Clear temporary storage for the non-list properties in the current element.
-        m_elementData.clear();
-        m_elementLoaded = false;
+          uint32_t numBytes = kPLYPropertySize[uint32_t(prop.countType)];
+          if (m_pos + numBytes > m_bufEnd) {
+            if (!refill_buffer() || m_pos + numBytes > m_bufEnd) {
+              m_valid = false;
+              return;
+            }
+          }
+
+          int count = 0;
+          switch (prop.countType) {
+          case PLYPropertyType::Char:
+            count = static_cast<int>(*reinterpret_cast<const int8_t*>(m_pos));
+            break;
+          case PLYPropertyType::UChar:
+            count = static_cast<int>(*reinterpret_cast<const uint8_t*>(m_pos));
+            break;
+          case PLYPropertyType::Short:
+            count = static_cast<int>(*reinterpret_cast<const int16_t*>(m_pos));
+            break;
+          case PLYPropertyType::UShort:
+            count = static_cast<int>(*reinterpret_cast<const uint16_t*>(m_pos));
+            break;
+          case PLYPropertyType::Int:
+            count = *reinterpret_cast<const int*>(m_pos);
+            break;
+          case PLYPropertyType::UInt:
+            count = static_cast<int>(*reinterpret_cast<const uint32_t*>(m_pos));
+            break;
+          default:
+            m_valid = false;
+            return;
+          }
+
+          if (count < 0) {
+            m_valid = false;
+            return;
+          }
+
+          numBytes += count * kPLYPropertySize[uint32_t(prop.type)];
+          if (m_pos + numBytes > m_bufEnd) {
+            if (!refill_buffer() || m_pos + numBytes > m_bufEnd) {
+              m_valid = false;
+              return;
+            }
+          }
+          m_pos += numBytes;
+          m_end = m_pos;
+        }
       }
-      ++m_currentElement;
+    }
+    else { // PLYFileType::BinaryBigEndian
+      for (uint32_t row = 0; row < elem.count; row++) {
+        for (const PLYProperty& prop : elem.properties) {
+          if (prop.countType == PLYPropertyType::None) {
+            uint32_t numBytes = kPLYPropertySize[uint32_t(prop.type)];
+            if (m_pos + numBytes > m_bufEnd) {
+              if (!refill_buffer() || m_pos + numBytes > m_bufEnd) {
+                m_valid = false;
+                return;
+              }
+            }
+            m_pos += numBytes;
+            m_end = m_pos;
+            continue;
+          }
+
+          uint32_t numBytes = kPLYPropertySize[uint32_t(prop.countType)];
+          if (m_pos + numBytes > m_bufEnd) {
+            if (!refill_buffer() || m_pos + numBytes > m_bufEnd) {
+              m_valid = false;
+              return;
+            }
+          }
+
+          uint8_t tmp[8];
+          memcpy(tmp, m_pos, numBytes);
+          switch (numBytes) {
+          case 2:
+            endian_swap_2(tmp);
+            break;
+          case 4:
+            endian_swap_4(tmp);
+            break;
+          case 8:
+            endian_swap_8(tmp);
+            break;
+          default:
+            break;
+          }
+
+          int count = 0;
+          switch (prop.countType) {
+          case PLYPropertyType::Char:
+            count = static_cast<int>(*reinterpret_cast<const int8_t*>(tmp));
+            break;
+          case PLYPropertyType::UChar:
+            count = static_cast<int>(*reinterpret_cast<const uint8_t*>(tmp));
+            break;
+          case PLYPropertyType::Short:
+            count = static_cast<int>(*reinterpret_cast<const int16_t*>(tmp));
+            break;
+          case PLYPropertyType::UShort:
+            count = static_cast<int>(*reinterpret_cast<const uint16_t*>(tmp));
+            break;
+          case PLYPropertyType::Int:
+            count = *reinterpret_cast<const int*>(tmp);
+            break;
+          case PLYPropertyType::UInt:
+            count = static_cast<int>(*reinterpret_cast<const uint32_t*>(tmp));
+            break;
+          default:
+            m_valid = false;
+            return;
+          }
+
+          if (count < 0) {
+            m_valid = false;
+            return;
+          }
+
+          numBytes += count * kPLYPropertySize[uint32_t(prop.type)];
+          if (m_pos + numBytes > m_bufEnd) {
+            if (!refill_buffer() || m_pos + numBytes > m_bufEnd) {
+              m_valid = false;
+              return;
+            }
+          }
+
+          m_pos += numBytes;
+          m_end = m_pos;
+        }
+      }
     }
   }
 
@@ -2294,6 +2473,15 @@ namespace minipbrt {
     m_atEOF = fetched < kPLYReadBufferSize;
     m_bufEnd = m_buf + fetched;
 
+    if (!m_inDataSection || m_fileType == PLYFileType::ASCII) {
+      return rewind_to_safe_char();
+    }
+    return true;
+  }
+
+
+  bool PLYReader::rewind_to_safe_char()
+  {
     // If it looks like a token might run past the end of this buffer, move
     // the buffer end pointer back before it & rewind the file. This way the
     // next refill will pick up the whole of the token.
@@ -2317,6 +2505,13 @@ namespace minipbrt {
     }
     m_buf[m_bufEnd - m_buf] = '\0';
 
+    return true;
+  }
+
+
+  bool PLYReader::accept()
+  {
+    m_pos = m_end;
     return true;
   }
 
@@ -2542,7 +2737,9 @@ namespace minipbrt {
 
   bool PLYReader::load_fixed_size_element(PLYElement& elem)
   {
-    m_elementData.resize(elem.count * elem.rowStride);
+    size_t numBytes = elem.count * elem.rowStride;
+
+    m_elementData.resize(numBytes);
 
     if (m_fileType == PLYFileType::ASCII) {
       size_t back = 0;
@@ -2558,9 +2755,22 @@ namespace minipbrt {
       }
     }
     else {
-      // We can read all the data for a fixed size binary element in single `fread` call.
-      size_t numRead = fread(m_elementData.data(), elem.rowStride, elem.count, m_f);
-      if (numRead != elem.count) {
+      uint8_t* dst = m_elementData.data();
+      uint8_t* dstEnd = dst + numBytes;
+      while (dst < dstEnd) {
+        size_t bytesAvailable = static_cast<size_t>(m_bufEnd - m_pos);
+        if (dst + bytesAvailable > dstEnd) {
+          bytesAvailable = static_cast<size_t>(dstEnd - dst);
+        }
+        std::memcpy(dst, m_pos, bytesAvailable);
+        m_pos += bytesAvailable;
+        m_end = m_pos;
+        dst += bytesAvailable;
+        if (!refill_buffer()) {
+          break;
+        }
+      }
+      if (dst < dstEnd) {
         m_valid = false;
         return false;
       }
@@ -2690,10 +2900,15 @@ namespace minipbrt {
   bool PLYReader::load_binary_scalar_property(PLYProperty& prop, size_t& destIndex)
   {
     size_t numBytes = kPLYPropertySize[uint32_t(prop.type)];
-    if (fread(m_elementData.data() + destIndex, numBytes, 1, m_f) != 1) {
-      m_valid = false;
-      return false;
+    if (m_pos + numBytes > m_bufEnd) {
+      if (!refill_buffer() || m_pos + numBytes > m_bufEnd) {
+        m_valid = false;
+        return false;
+      }
     }
+    std::memcpy(m_elementData.data() + destIndex, m_pos, numBytes);
+    m_pos += numBytes;
+    m_end = m_pos;
     destIndex += numBytes;
     return true;
   }
@@ -2701,11 +2916,16 @@ namespace minipbrt {
 
   bool PLYReader::load_binary_list_property(PLYProperty& prop)
   {
-    uint8_t tmp[8];
-    if (fread(tmp, kPLYPropertySize[uint32_t(prop.countType)], 1, m_f) != 1) {
-      m_valid = false;
-      return false;
+    size_t countBytes = kPLYPropertySize[uint32_t(prop.countType)];
+    if (m_pos + countBytes > m_bufEnd) {
+      if (!refill_buffer() || m_pos + countBytes > m_bufEnd) {
+        m_valid = false;
+        return false;
+      }
     }
+
+    uint8_t tmp[8];
+    std::memcpy(tmp, m_pos, countBytes);
 
     int count = 0;
     switch (prop.countType) {
@@ -2737,16 +2957,25 @@ namespace minipbrt {
       return false;
     }
 
-    const size_t numBytes = kPLYPropertySize[uint32_t(prop.type)];
+    m_pos += countBytes;
+    m_end = m_pos;
 
+    const size_t numBytes = kPLYPropertySize[uint32_t(prop.type)] * count;
+    if (m_pos + numBytes > m_bufEnd) {
+      if (!refill_buffer() || m_pos + numBytes > m_bufEnd) {
+        m_valid = false;
+        return false;
+      }
+    }
     size_t back = prop.listData.size();
     prop.rowStart.push_back(static_cast<uint32_t>(back));
     prop.rowCount.push_back(static_cast<uint32_t>(count));
-    prop.listData.resize(back + numBytes * size_t(count));
-    if (fread(prop.listData.data() + back, numBytes, size_t(count), m_f) != size_t(count)) {
-      m_valid = false;
-    }
-    return m_valid;
+    prop.listData.resize(back + numBytes);
+    std::memcpy(prop.listData.data() + back, m_pos, numBytes);
+
+    m_pos += numBytes;
+    m_end = m_pos;
+    return true;
   }
 
 
@@ -2777,11 +3006,16 @@ namespace minipbrt {
 
   bool PLYReader::load_binary_list_property_big_endian(PLYProperty &prop)
   {
-    uint8_t tmp[8];
-    if (fread(tmp, kPLYPropertySize[uint32_t(prop.countType)], 1, m_f) != 1) {
-      m_valid = false;
-      return false;
+    size_t countBytes = kPLYPropertySize[uint32_t(prop.countType)];
+    if (m_pos + countBytes > m_bufEnd) {
+      if (!refill_buffer() || m_pos + countBytes > m_bufEnd) {
+        m_valid = false;
+        return false;
+      }
     }
+
+    uint8_t tmp[8];
+    std::memcpy(tmp, m_pos, countBytes);
 
     int count = 0;
     switch (prop.countType) {
@@ -2817,40 +3051,47 @@ namespace minipbrt {
       return false;
     }
 
-    const size_t numBytes = kPLYPropertySize[uint32_t(prop.type)];
+    m_pos += countBytes;
+    m_end = m_pos;
 
+    const size_t numBytes = kPLYPropertySize[uint32_t(prop.type)] * count;
+    if (m_pos + numBytes > m_bufEnd) {
+      if (!refill_buffer() || m_pos + numBytes > m_bufEnd) {
+        m_valid = false;
+        return false;
+      }
+    }
     size_t back = prop.listData.size();
     prop.rowStart.push_back(static_cast<uint32_t>(back));
     prop.rowCount.push_back(static_cast<uint32_t>(count));
     prop.listData.resize(back + numBytes * size_t(count));
-    if (fread(prop.listData.data() + back, numBytes, size_t(count), m_f) == size_t(count)) {
-      const uint8_t* listEnd = prop.listData.data() + prop.listData.size();
-      uint8_t* listPos = prop.listData.data() + back;
-      switch (numBytes) {
-      case 2:
-        for (; listPos < listEnd; listPos += numBytes) {
-          endian_swap_2(listPos);
-        }
-        break;
-      case 4:
-        for (; listPos < listEnd; listPos += numBytes) {
-          endian_swap_4(listPos);
-        }
-        break;
-      case 8:
-        for (; listPos < listEnd; listPos += numBytes) {
-          endian_swap_8(listPos);
-        }
-        break;
-      default:
-        break;
+    std::memcpy(prop.listData.data() + back, m_pos, numBytes);
+
+    const uint8_t* listEnd = prop.listData.data() + prop.listData.size();
+    uint8_t* listPos = prop.listData.data() + back;
+    switch (numBytes) {
+    case 2:
+      for (; listPos < listEnd; listPos += numBytes) {
+        endian_swap_2(listPos);
       }
-      return true;
+      break;
+    case 4:
+      for (; listPos < listEnd; listPos += numBytes) {
+        endian_swap_4(listPos);
+      }
+      break;
+    case 8:
+      for (; listPos < listEnd; listPos += numBytes) {
+        endian_swap_8(listPos);
+      }
+      break;
+    default:
+      break;
     }
-    else {
-      m_valid = false;
-      return false;
-    }
+
+    m_pos += numBytes;
+    m_end = m_pos;
+    return true;
   }
 
 
@@ -4348,7 +4589,7 @@ namespace minipbrt {
     }
 
     if (!ok) {
-      m_tokenizer.set_error("Failed to parse %s", statement.name);      
+      m_tokenizer.set_error("Failed to parse %s", statement.name);
     }
 
     return ok;
@@ -5460,7 +5701,7 @@ namespace minipbrt {
         const MixMaterial* src = dynamic_cast<const MixMaterial*>(baseMaterial);
         MixMaterial* dst = new MixMaterial();
         color_texture_param_with_default("amount", &dst->amount, &src->amount);
-        
+
         char* tmp = nullptr;
         if (string_param("namedmaterial1", &tmp)) {
           dst->namedmaterial1 = find_material(tmp);
@@ -6335,7 +6576,7 @@ namespace minipbrt {
   }
 
 
-  bool Parser::parse_TransformTimes()  
+  bool Parser::parse_TransformTimes()
   {
     m_scene->startTime = float_arg(0);
     m_scene->endTime = float_arg(1);

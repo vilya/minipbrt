@@ -65,10 +65,6 @@ Reduce memory usage for the in-memory scene representation:
 Improve IO performance:
 - Use a background thread and/or async I/O calls to load the next buffer while
   parsing the current buffer.
-- Read variable-sized elements from PLY files more efficiently.
-  - Currently doing two small fread calls *per row*.
-  - Use a similar approach to text parsing: read a chunk of bytes at a time,
-    with handling for rows that cross chunk boundaries.
 
 
 Code structure

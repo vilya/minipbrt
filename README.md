@@ -11,11 +11,10 @@ Features
 --------
 
 - *Small*: just a single .h and .cpp file which you can copy into your project.
-- *Fast*: 20 to 100 times faster than pbrt-parser on most scenes.
-- *Complete*: supports the full PBRTv3 file format, not just a subset.
-- *Low overehead*: only uses a small input buffer while parsing (1 MB for .pbrt 
-  files, 128 KB for .ply files)
-- Provides built-in functions for loading triangle mesh data from .ply files:
+- *Fast*: between 4 and 30 times faster than pbrt-parser on most scenes.
+- *Complete*: supports the full PBRTv3 file format, not just a subset; and can
+  load mesh data from any valid PLY file (ascii, little endian or big endian).
+- Provides built-in functions for loading triangle mesh data from PLY files:
   - One function which loads all .ply files
   - One function to load a single .ply file, which you can safely call from 
     multiple threads concurrently.
@@ -38,6 +37,25 @@ The CMake file in this directory is just for building the examples.
 Loading a file
 --------------
 
+Simply create a `minipbrt::Parser` object and call it's `parse()` method,
+passing in the name of the file you want to parse. The method will return
+`true` if parsing succeeded or `false` if there was an error. 
+
+If parsing succeeded, call `parser.take_scene()` or `parser.borrow_scene()` to
+get a pointer to a `minipbrt::Scene` object describing the scene. The
+`take_scene` method transfers ownership of the scene object to the caller,
+meaning you must delete it yourself when you're finished with it; whereas
+`borrow_scene` lets you use the scene object temporarily, but it will be
+deleted automatically by the parser's destructor.
+
+If parsing failed, call `parser.get_error()` to get a `minipbrt::Error` object
+describing what went wrong. The object includes the filename, line number and
+column number where the error occurred. This will be exact for syntactic
+errors, but may give the location of the token immediately *after* the error
+for semantic errors. The error object remains owned by the parser, so you
+never have to delete it yourself.
+
+Example code:
 ```
 minipbrt::Parser parser;
 if (parser.parse(filename)) {
@@ -79,21 +97,6 @@ Implementation notes
   size of the input buffer, although the default (1 MB) should be fine in all 
   but the most extreme cases.
 
-* I experimented with keeping transforms in a separate list and having other
-  objects refer to them by index. I hoped this would save memory because some
-  things could share the same transform, but it didn't work out that way in
-  practice: many scenes end up having a unique transform per object, so we 
-  ended up paying the cost of a reference AND a transform per object.
-
-  * Future work in this area: if the file isn't animated, only store one 
-    matrix per object instead of two. Currently we always store two: one for 
-    the start time and one for  the end time, just in case the file is 
-    animated. But this can end up being a lot of wasted memory if the file 
-    isn't animated (roughly 2.4 GB for the Moana island, for example).
-
-  * Also, even when the file *is* animated, if both matrices are identical we 
-    only need to store one of them.
-    
 
 Performance
 -----------

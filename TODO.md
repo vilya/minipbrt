@@ -1,22 +1,21 @@
 TO DO
 =====
 
-Must have (parser is not correct without them)
-----------------------------------------------
+Correctness
+-----------
 
-All done!
+Remove all hard-coded limits on string length:
+* We use a lot of locally-declared char arrays as temp storage for strings,
+  which give an implicit max length for the strings they deal with.
+* Remove these. Enum strings should be processed in-buffer, name strings &
+  filenames should be copied into the temp param data.
+* The only practical limit should be the buffer length (would be nice to
+  remove that limit too, but not if it reduces performance).
 
 
-Nice to have (improvements that don't affect correctness)
----------------------------------------------------------
+Features
+--------
 
-Improve performance of material overrides.
-- Currently has a large perf penalty.
-- Does too much work to determine whether the shape overrides its material.
-- Make the "has overrides" test more efficient.
-  - If there are any texture params other than alpha and shadowalpha, it's probably an override.
-  - If there are any spectrum params it's probably an override.
-  
 Expose the API for extracting data from PLY files to end users.
 
 Add functions for converting other shapes into a TriangleMesh:
@@ -28,36 +27,29 @@ Add functions for converting other shapes into a TriangleMesh:
 [ ] Paraboloid
 [ ] Sphere
 
-Remove all hard-coded limits on string length:
-* We use a lot of locally-declared char arrays as temp storage for strings,
-  which give an implicit max length for the strings they deal with.
-* Remove these. Enum strings should be processed in-buffer, name strings &
-  filenames should be copied into the temp param data.
-* The only practical limit should be the buffer length (would be nice to
-  remove that limit too, but not if it reduces performance).
-
 Strict mode vs. permissive mode
 * Strict mode errors on unknown statements/parameters, permissive mode ignores
   them.
 * Both still error on malformed tokens, missing args & required params, etc.
 
-Factor out checks for required params into a function.
-
-`pbrtinfo` example
-* Rename main.cpp to pbrtinfo.cpp & move into an `examples` directory.
-
-Code clean-up:
-* Merge the tokenizer class into the parser class.
-* Move as much as possible out of the header and into the cpp file.
-* Make `set_error()` return bool so it can be used as part of a return statement.
-* Remove any unused code.
-
-Optional callback-based parsing interface
+Callback-based parsing interface
 * For use if you have your own scene data model that you want to populate and
   don't want to create our data model as an intermediate step.
 * Separate the existing scene construction code into a SceneBuilder class,
   Parser should only invoke callbacks. SceneBuilder should be the default 
   callback handler.
+
+Improved error handling:
+* Currently we stop at the first error & "error" is the only level.
+* Add support for multiple errors.
+* Add support for warnings.
+* Make line number calculation more efficient when we have to do it multiple times:
+  * Currently we count newlines from the start of the file every time
+  * Instead, keep track of the last line number we calculated & its file offset. Count from there instead of the start of the file.
+
+
+Performance
+-----------
 
 Reduce memory usage while parsing large attribute values, e.g. the vertex and
 index arrays for a large triangle mesh.
@@ -78,10 +70,17 @@ Improve IO performance:
   - Use a similar approach to text parsing: read a chunk of bytes at a time,
     with handling for rows that cross chunk boundaries.
 
-Improved error handling:
-* Currently we stop at the first error & "error" is the only level.
-* Add support for multiple errors.
-* Add support for warnings.
-* Make line number calculation more efficient when we have to do it multiple times:
-  * Currently we count newlines from the start of the file every time
-  * Instead, keep track of the last line number we calculated & its file offset. Count from there instead of the start of the file.
+
+Code structure
+--------------
+
+Factor out checks for required params into a function.
+
+`pbrtinfo` example
+* Rename main.cpp to pbrtinfo.cpp & move into an `examples` directory.
+
+Code clean-up:
+* Merge the tokenizer class into the parser class.
+* Move as much as possible out of the header and into the cpp file.
+* Make `set_error()` return bool so it can be used as part of a return statement.
+* Remove any unused code.

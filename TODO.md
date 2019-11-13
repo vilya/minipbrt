@@ -64,7 +64,7 @@ Reduce memory usage for the in-memory scene representation:
 
 Improve IO performance:
 - Use a background thread and/or async I/O calls to load the next buffer while
-  parsing the current buffer.
+  we're parsing the current buffer.
 
 
 Code structure

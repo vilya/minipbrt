@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -35,6 +36,58 @@ namespace minipbrt {
   static void print_triangle_mesh_summary(const Scene* scene);
 
   static uint64_t triangle_mesh_bytes(const TriangleMesh* trimesh);
+
+
+  //
+  // Timer class
+  //
+
+  class Timer {
+  public:
+    Timer(bool autostart=false);
+
+    void start();
+    void stop();
+
+    double elapsedSecs() const;
+
+  private:
+    std::chrono::high_resolution_clock::time_point _start;
+    std::chrono::high_resolution_clock::time_point _stop;
+    bool _running = false;
+  };
+
+
+  Timer::Timer(bool autostart)
+  {
+    if (autostart) {
+      start();
+    }
+  }
+
+
+  void Timer::start()
+  {
+    _start = _stop = std::chrono::high_resolution_clock::now();
+    _running = true;
+  }
+
+
+  void Timer::stop()
+  {
+    if (_running) {
+      _stop = std::chrono::high_resolution_clock::now();
+      _running = false;
+    }
+  }
+
+
+  double Timer::elapsedSecs() const
+  {
+    std::chrono::duration<double, std::chrono::seconds::period> secs =
+       (_running ? std::chrono::high_resolution_clock::now() : _stop) - _start;
+    return secs.count();
+  }
 
 
   //
@@ -644,6 +697,8 @@ namespace minipbrt {
     return meshBytes;
   }
 
+
+
 } // namespace minipbrt
 
 
@@ -717,13 +772,21 @@ int main(int argc, char** argv)
       }
     }
 
+    minipbrt::Timer overallTimer(true); // true ==> autostart the timer.
     int numPassed = 0;
     int numFailed = 0;
     for (const std::string& filename : filenames) {
+      minipbrt::Timer timer(true); // true ==> autostart the timer.
+
       minipbrt::Parser parser;
       bool ok = parser.parse(filename.c_str());
       bool plyOK = ok ? parser.borrow_scene()->load_all_ply_meshes() : false;
-      printf("%-*s  %s", width, filename.c_str(), (ok && plyOK) ? "passed" : "FAILED");
+
+      timer.stop();
+      printf("%-*s  %s  %8.3lf secs",
+             width, filename.c_str(),
+             (ok && plyOK) ? "passed" : "FAILED",
+             timer.elapsedSecs());
       if (!ok) {
         const minipbrt::Error* err = parser.get_error();
         printf(" ---> [%s, line %lld, column %lld] %s\n", err->filename(), err->line(), err->column(), err->message());
@@ -739,7 +802,10 @@ int main(int argc, char** argv)
       }
       fflush(stdout);
     }
+
+    overallTimer.stop();
     printf("----\n");
+    printf("%.3lf secs total\n", overallTimer.elapsedSecs());
     printf("%d passed\n", numPassed);
     printf("%d failed\n", numFailed);
     return (numFailed > 0) ? EXIT_FAILURE : EXIT_SUCCESS;

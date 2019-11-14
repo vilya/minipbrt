@@ -5355,9 +5355,10 @@ namespace minipbrt {
       }
     }
 
-    if (m_activeObject != kInvalidIndex) {
-      m_tempShapes.push_back(static_cast<uint32_t>(m_scene->shapes.size()));
+    if (m_activeObject != kInvalidIndex && m_firstShape == kInvalidIndex) {
+      m_firstShape = static_cast<uint32_t>(m_scene->shapes.size());
     }
+
     m_scene->shapes.push_back(shape);
     return true;
   }
@@ -6097,7 +6098,7 @@ namespace minipbrt {
       return false;
     }
 
-    m_tempShapes.clear();
+    m_firstShape = kInvalidIndex;
 
     Object* object = new Object();
     save_current_transform_matrices(&object->objectToInstance);
@@ -6127,10 +6128,8 @@ namespace minipbrt {
     }
 
     Object* object = m_scene->objects[m_activeObject];
-    object->numShapes = static_cast<uint32_t>(m_tempShapes.size());
-    object->shapes = new uint32_t[object->numShapes];
-    std::memcpy(object->shapes, m_tempShapes.data(), object->numShapes * sizeof(uint32_t));
-    m_tempShapes.clear();
+    object->firstShape = m_firstShape;
+    object->numShapes = m_firstShape == kInvalidIndex ? 0 : (static_cast<uint32_t>(m_scene->shapes.size()) - m_firstShape);
 
     m_activeObject = kInvalidIndex;
     return true;

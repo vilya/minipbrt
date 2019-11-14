@@ -1417,12 +1417,11 @@ namespace minipbrt {
   struct Object {
     const char* name = nullptr;
     Transform objectToInstance;
-    uint32_t* shapes           = nullptr;
+    uint32_t firstShape        = kInvalidIndex;
     unsigned int numShapes     = 0;
 
     ~Object() {
       delete[] name;
-      delete[] shapes;
     }
   };
 
@@ -1746,6 +1745,7 @@ namespace minipbrt {
     TransformStack* m_transforms = nullptr;
     AttributeStack* m_attrs      = nullptr;
     uint32_t m_activeObject      = kInvalidIndex;
+    uint32_t m_firstShape        = kInvalidIndex; // Index of the first shape in the currently active object.
 
     Scene* m_scene               = nullptr;
 
@@ -1753,9 +1753,6 @@ namespace minipbrt {
     uint32_t m_statementIndex = uint32_t(-1);
     std::vector<ParamInfo> m_params;
     std::vector<uint8_t> m_temp;
-
-    // Temporary storage for the active object.
-    std::vector<uint32_t> m_tempShapes;
   };
 
 } // namespace minipbrt

@@ -1224,6 +1224,10 @@ namespace minipbrt {
       return false;
     }
 
+    if (negative) {
+      localVal = -localVal;
+    }
+
     if (val != nullptr) {
       *val = localVal;
     }
@@ -1555,6 +1559,26 @@ namespace minipbrt {
 
   void Mat4::translate(const float v[3])
   {
+    /*
+    this = 
+      a b c d
+      e f g h
+      i j k l
+      m n o p
+
+    T =
+      1 0 0 x
+      0 1 0 y
+      0 0 1 z
+      0 0 0 1
+
+    this * T =
+      a b c (ax + by + cz + d)
+      e f g (ex + fy + gz + h)
+      i j k (ix + jy + kz + l)
+      m n o (mx + ny + oz + p)
+    */
+
     rows[0][3] += rows[0][0] * v[0] + rows[0][1] * v[1] + rows[0][2] * v[2];
     rows[1][3] += rows[1][0] * v[0] + rows[1][1] * v[1] + rows[1][2] * v[2];
     rows[2][3] += rows[2][0] * v[0] + rows[2][1] * v[1] + rows[2][2] * v[2];
@@ -1564,6 +1588,25 @@ namespace minipbrt {
 
   void Mat4::scale(const float v[3])
   {
+    /*
+    this = 
+      a b c d
+      e f g h
+      i j k l
+      m n o p
+
+    S =
+      x 0 0 0
+      0 y 0 0
+      0 0 z 0
+      0 0 0 1
+
+    this * S =
+      ax by cz d
+      ex fy gz h
+      ix jy kz l
+      mx ny oz p
+    */
     rows[0][0] *= v[0];
     rows[0][1] *= v[1];
     rows[0][2] *= v[2];
@@ -1594,10 +1637,41 @@ namespace minipbrt {
     float a[4][4];
     std::memcpy(a, rows, sizeof(a));
 
+    /*
+    this = 
+      a b c d
+      e f g h
+      i j k l
+      m n o p
+
+    R =
+      ra rb rc 0
+      rd re rf 0
+      rg rh ri 0
+      0  0  0  1
+
+    this * R =
+      (a.ra + b.rd + c.rg)  (a.rb + b.re + c.rh)  (a.rc + b.rf + c.ri)  d
+      (e.ra + f.rd + g.rg)  (e.rb + f.re + g.rh)  (e.rc + f.rf + g.ri)  h
+      (i.ra + j.rd + k.rg)  (i.rb + j.re + k.rh)  (i.rc + j.rf + k.ri)  l
+      (m.ra + n.rd + o.rg)  (m.rb + n.re + o.rh)  (m.rc + n.rf + o.ri)  p
+
+    ra = ux * ux * (1 - cosTheta) + cosTheta
+    rb = ux * uy * (1 - cosTheta) - uz * sinTheta
+    rc = ux * uz * (1 - cosTheta) + uy * sinTheta
+
+    rd = uy * ux * (1 - cosTheta) + uz * sinTheta
+    re = uy * uy * (1 - cosTheta) + cosTheta
+    rf = uy * uz * (1 - cosTheta) - ux * sinTheta
+
+    rg = uz * ux * (1 - cosTheta) - uy * sinTheta
+    rh = uz * uy * (1 - cosTheta) + ux * sinTheta
+    ri = uz * uz * (1 - cosTheta) + cosTheta 
+    */
     float b[3][3] = {
       { u[0] * u[0] * (1.0f - c) + c,         u[0] * u[1] * (1.0f - c) - u[2] * s,  u[0] * u[2] * (1.0f - c) + u[1] * s },
-      { u[1] * u[0] * (1.0f - c) + u[2] * s,  u[1] * u[1] * (1.0f - c) + c,         u[1] * u[2] * (1.0f - c) + u[0] * s },
-      { u[2] * u[0] * (1.0f - c) - u[1] * s,  u[2] * u[1] * (1.0f - c) + u[0] * s,  u[1] * u[1] * (1.0f - c) + c        },
+      { u[1] * u[0] * (1.0f - c) + u[2] * s,  u[1] * u[1] * (1.0f - c) + c,         u[1] * u[2] * (1.0f - c) - u[0] * s },
+      { u[2] * u[0] * (1.0f - c) - u[1] * s,  u[2] * u[1] * (1.0f - c) + u[0] * s,  u[2] * u[2] * (1.0f - c) + c        },
     };
 
     rows[0][0] = a[0][0] * b[0][0] + a[0][1] * b[1][0] + a[0][2] * b[2][0];
@@ -1621,7 +1695,7 @@ namespace minipbrt {
   void Mat4::lookAt(const float params[9])
   {
     float pos[3] = { params[0], params[1], params[2] };
-    float dir[3] = { params[3] - params[0], params[4] - params[1], params[5] - params[1] };
+    float dir[3] = { params[3] - params[0], params[4] - params[1], params[5] - params[2] };
     float up[3]  = { params[6], params[7], params[8] };
 
     // Make sure both `dir` and `up` are normalized.
@@ -1629,45 +1703,131 @@ namespace minipbrt {
     normalize_in_place(up);
 
     float xAxis[3];
-    cross(dir, up, xAxis);
+    cross(up, dir, xAxis);
     normalize_in_place(xAxis);
 
     float yAxis[3];
-    cross(xAxis, dir, yAxis);
+    cross(dir, xAxis, yAxis);
     normalize_in_place(yAxis);
 
     float a[4][4];
     std::memcpy(a, rows, sizeof(a));
 
-    float dotXPos = dot(xAxis, pos);
-    float dotYPos = dot(yAxis, pos);
-    float dotZPos = dot(dir, pos);
+    /*
+      this =
+        a b c d
+        e f g h
+        i j k l
+        m n o p
 
-    rows[0][0] = a[0][0] * xAxis[0] + a[0][1] * yAxis[0] + a[0][2] * -dir[0];
-    rows[0][1] = a[0][0] * xAxis[1] + a[0][1] * yAxis[1] + a[0][2] * -dir[1];
-    rows[0][2] = a[0][0] * xAxis[2] + a[0][1] * yAxis[2] + a[0][2] * -dir[2];
-    rows[0][3] = a[0][0] * -dotXPos + a[0][1] * -dotYPos + a[0][2] * dotZPos + a[0][3] * 1.0f;
+      W =
+        xx  yx  dx  px
+        xy  yy  dy  py
+        xz  yz  dz  pz
+        0   0   0   1
 
-    rows[1][0] = a[1][0] * xAxis[0] + a[1][1] * yAxis[0] + a[1][2] * -dir[0];
-    rows[1][1] = a[1][0] * xAxis[1] + a[1][1] * yAxis[1] + a[1][2] * -dir[1];
-    rows[1][2] = a[1][0] * xAxis[2] + a[1][1] * yAxis[2] + a[1][2] * -dir[2];
-    rows[1][3] = a[1][0] * -dotXPos + a[1][1] * -dotYPos + a[1][2] * dotZPos + a[1][3] * 1.0f;
+      Note that W is the camera to world transform. We need the world to
+      camera transform so must take its inverse, which Mathematica says is
 
-    rows[2][0] = a[2][0] * xAxis[0] + a[2][1] * yAxis[0] + a[2][2] * -dir[0];
-    rows[2][1] = a[2][0] * xAxis[1] + a[2][1] * yAxis[1] + a[2][2] * -dir[1];
-    rows[2][2] = a[2][0] * xAxis[2] + a[2][1] * yAxis[2] + a[2][2] * -dir[2];
-    rows[2][3] = a[2][0] * -dotXPos + a[2][1] * -dotYPos + a[2][2] * dotZPos + a[2][3] * 1.0f;
+      det(W) = -dz xy yx + dy xz yx + dz xx yy - dx xz yy - dy xx yz + dx xy yz
+             = -((dz xy - dy xz) yx + (dx xz - dz xx) yy + (dy xx - dx xy) yz)
+             = -dot(cross(xAxis, dir), yAxis)
 
-    rows[3][0] = a[3][0] * xAxis[0] + a[3][1] * yAxis[0] + a[3][2] * -dir[0];
-    rows[3][1] = a[3][0] * xAxis[1] + a[3][1] * yAxis[1] + a[3][2] * -dir[1];
-    rows[3][2] = a[3][0] * xAxis[2] + a[3][1] * yAxis[2] + a[3][2] * -dir[2];
-    rows[3][3] = a[3][0] * -dotXPos + a[3][1] * -dotYPos + a[3][2] * dotZPos + a[3][3] * 1.0f;
+      inv(W) = (1 / det(W)) *
+        ( dz yy - dy yz)   (-dz yx + dx yz)    ( dy yx - dx yy)    ( dz py yx - dy pz yx - dz px yy + dx pz yy + dy px yz - dx py yz)
+        (-dz xy + dy xz)   ( dz xx - dx xz)    (-dy xx + dx xy)    (-dz py xx + dy pz xx + dz px xy - dx pz xy - dy px xz + dx py xz)
+        (-xz yy + xy yz)   ( xz yx - xx yz)    (-xy yx + xx yy)    ( pz xy yx - py xz yx - pz xx yy + px xz yy + py xx yz - px xy yz)
+        0                  0                   0                   (-dz xy yx + dy xz yx + dz xx yy - dx xz yy - dy xx yz + dx xy yz)
+
+      The values in the final column can be factored a bit more:
+
+        ( dz py yx - dy pz yx - dz px yy + dx pz yy + dy px yz - dx py yz) =>   (dz py - dy pz) yx + (dx pz - dz px) yy + (dy px - dx py) yz  =>  dot(cross(pos,   dir), yAxis)
+        (-dz py xx + dy pz xx + dz px xy - dx pz xy - dy px xz + dx py xz) => -((dz py - dy pz) xx + (dx pz - dz px) xy + (dy px - dx py) xz) => -dot(cross(pos,   dir), xAxis)
+        ( pz xy yx - py xz yx - pz xx yy + px xz yy + py xx yz - px xy yz) =>   (pz xy - py xz) yx + (px xz - pz xx) yy + (py xx - px xy) yz  =>  dot(cross(xAxis, pos), yAxis)
+        (-dz xy yx + dy xz yx + dz xx yy - dx xz yy - dy xx yz + dx xy yz) => -((dz xy - dy xz) yx + (dx xz - dz xx) yy + (dy xx - dx xy) yz) => -dot(cross(xAxis, dir), yAxis)
+
+      Likewise, the values in the upper left 3x3 submatrix are all components of the following cross products:
+
+         cross(yAxis, dir)
+        -cross(xAxis, dir)
+         cross(xAxis, yAxis)
+
+      Note also that 
+
+        -cross(xAxis, dir) = cross(dir, xAxis) = yAxis
+         cross(xAxis, dir) = -yAxis
+         cross(xAxis, yAxis) = dir
+         cross(yAxis, dir) = xAxis
+      
+      And therefore
+
+        -dot(cross(xAxis, dir), yAxis) = -dot(-yAxis, yAxis) = dot(yAxis, yAxis) = lengthsqr(yAxis) = 1
+
+      Giving us
+
+      inv(W) =
+        xaxis.x   xaxis.y   xaxis.z    dot(cross(pos,   dir), yAxis)
+        yaxis.x   yaxis.y   yaxis.z   -dot(cross(pos,   dir), xAxis)
+        dir.x     dir.y     dir.z      dot(cross(xAxis, pos), yAxis)
+        0         0         0          1
+
+      Now we simply post-multiply `this` by inv(W).
+    */
+
+    float PcrossD[3];
+    float XcrossP[3];
+    cross(pos, dir, PcrossD);
+    cross(xAxis, dir, XcrossP);
+
+    float xAxisW =  dot(PcrossD, yAxis);
+    float yAxisW = -dot(PcrossD, xAxis);
+    float dirW   =  dot(XcrossP, yAxis);
+
+    rows[0][0] = a[0][0] * xAxis[0] + a[0][1] * yAxis[0] + a[0][2] * dir[0];
+    rows[0][1] = a[0][0] * xAxis[1] + a[0][1] * yAxis[1] + a[0][2] * dir[1];
+    rows[0][2] = a[0][0] * xAxis[2] + a[0][1] * yAxis[2] + a[0][2] * dir[2];
+    rows[0][3] = a[0][0] * xAxisW   + a[0][1] * yAxisW   + a[0][2] * dirW + a[0][3];
+
+    rows[1][0] = a[1][0] * xAxis[0] + a[1][1] * yAxis[0] + a[1][2] * dir[0];
+    rows[1][1] = a[1][0] * xAxis[1] + a[1][1] * yAxis[1] + a[1][2] * dir[1];
+    rows[1][2] = a[1][0] * xAxis[2] + a[1][1] * yAxis[2] + a[1][2] * dir[2];
+    rows[1][3] = a[1][0] * xAxisW   + a[1][1] * yAxisW   + a[1][2] * dirW + a[1][3];
+
+    rows[2][0] = a[2][0] * xAxis[0] + a[2][1] * yAxis[0] + a[2][2] * dir[0];
+    rows[2][1] = a[2][0] * xAxis[1] + a[2][1] * yAxis[1] + a[2][2] * dir[1];
+    rows[2][2] = a[2][0] * xAxis[2] + a[2][1] * yAxis[2] + a[2][2] * dir[2];
+    rows[2][3] = a[2][0] * xAxisW   + a[2][1] * yAxisW   + a[2][2] * dirW + a[2][3];
+
+    rows[3][0] = a[3][0] * xAxis[0] + a[3][1] * yAxis[0] + a[3][2] * dir[0];
+    rows[3][1] = a[3][0] * xAxis[1] + a[3][1] * yAxis[1] + a[3][2] * dir[1];
+    rows[3][2] = a[3][0] * xAxis[2] + a[3][1] * yAxis[2] + a[3][2] * dir[2];
+    rows[3][3] = a[3][0] * xAxisW   + a[3][1] * yAxisW   + a[3][2] * dirW + a[3][3];
   }
 
 
   void Mat4::transform(const float params[16])
   {
-    std::memcpy(rows, params, sizeof(rows));
+    // Somewhat bizarrely, the ConcatTransform parameters are in column-major
+    // order even though PBRT's Matrix4x4 class uses row-major order.
+    rows[0][0] = params[0];
+    rows[1][0] = params[1];
+    rows[2][0] = params[2];
+    rows[3][0] = params[3];
+
+    rows[0][1] = params[4];
+    rows[1][1] = params[5];
+    rows[2][1] = params[6];
+    rows[3][1] = params[7];
+
+    rows[0][2] = params[ 8];
+    rows[1][2] = params[ 9];
+    rows[2][2] = params[10];
+    rows[3][2] = params[11];
+
+    rows[0][3] = params[12];
+    rows[1][3] = params[13];
+    rows[2][3] = params[14];
+    rows[3][3] = params[15];
   }
 
 
@@ -1676,28 +1836,30 @@ namespace minipbrt {
     float a[4][4];
     std::memcpy(a, rows, sizeof(a));
 
+    // Somewhat bizarrely, the ConcatTransform parameters are in column-major
+    // order even though PBRT's Matrix4x4 class uses row-major order.
     float b[4][4];
     std::memcpy(b, params, sizeof(b));
 
-    rows[0][0] = a[0][0] * b[0][0] + a[0][1] * b[1][0] + a[0][2] * b[2][0] + a[0][3] * b[3][0];
-    rows[0][1] = a[0][0] * b[0][1] + a[0][1] * b[1][1] + a[0][2] * b[2][1] + a[0][3] * b[3][1];
-    rows[0][2] = a[0][0] * b[0][2] + a[0][1] * b[1][2] + a[0][2] * b[2][2] + a[0][3] * b[3][2];
-    rows[0][3] = a[0][0] * b[0][3] + a[0][1] * b[1][3] + a[0][2] * b[2][3] + a[0][3] * b[3][3];
+    rows[0][0] = a[0][0] * b[0][0] + a[0][1] * b[0][1] + a[0][2] * b[0][2] + a[0][3] * b[0][3];
+    rows[0][1] = a[0][0] * b[1][0] + a[0][1] * b[1][1] + a[0][2] * b[1][2] + a[0][3] * b[1][3];
+    rows[0][2] = a[0][0] * b[2][0] + a[0][1] * b[2][1] + a[0][2] * b[2][2] + a[0][3] * b[2][3];
+    rows[0][3] = a[0][0] * b[3][0] + a[0][1] * b[3][1] + a[0][2] * b[3][2] + a[0][3] * b[3][3];
 
-    rows[1][0] = a[1][0] * b[0][0] + a[1][1] * b[1][0] + a[1][2] * b[2][0] + a[1][3] * b[3][0];
-    rows[1][1] = a[1][0] * b[0][1] + a[1][1] * b[1][1] + a[1][2] * b[2][1] + a[1][3] * b[3][1];
-    rows[1][2] = a[1][0] * b[0][2] + a[1][1] * b[1][2] + a[1][2] * b[2][2] + a[1][3] * b[3][2];
-    rows[1][3] = a[1][0] * b[0][3] + a[1][1] * b[1][3] + a[1][2] * b[2][3] + a[1][3] * b[3][3];
+    rows[1][0] = a[1][0] * b[0][0] + a[1][1] * b[0][1] + a[1][2] * b[0][2] + a[1][3] * b[0][3];
+    rows[1][1] = a[1][0] * b[1][0] + a[1][1] * b[1][1] + a[1][2] * b[1][2] + a[1][3] * b[1][3];
+    rows[1][2] = a[1][0] * b[2][0] + a[1][1] * b[2][1] + a[1][2] * b[2][2] + a[1][3] * b[2][3];
+    rows[1][3] = a[1][0] * b[3][0] + a[1][1] * b[3][1] + a[1][2] * b[3][2] + a[1][3] * b[3][3];
 
-    rows[2][0] = a[2][0] * b[0][0] + a[2][1] * b[1][0] + a[2][2] * b[2][0] + a[2][3] * b[3][0];
-    rows[2][1] = a[2][0] * b[0][1] + a[2][1] * b[1][1] + a[2][2] * b[2][1] + a[2][3] * b[3][1];
-    rows[2][2] = a[2][0] * b[0][2] + a[2][1] * b[1][2] + a[2][2] * b[2][2] + a[2][3] * b[3][2];
-    rows[2][3] = a[2][0] * b[0][3] + a[2][1] * b[1][3] + a[2][2] * b[2][3] + a[2][3] * b[3][3];
+    rows[2][0] = a[2][0] * b[0][0] + a[2][1] * b[0][1] + a[2][2] * b[0][2] + a[2][3] * b[0][3];
+    rows[2][1] = a[2][0] * b[1][0] + a[2][1] * b[1][1] + a[2][2] * b[1][2] + a[2][3] * b[1][3];
+    rows[2][2] = a[2][0] * b[2][0] + a[2][1] * b[2][1] + a[2][2] * b[2][2] + a[2][3] * b[2][3];
+    rows[2][3] = a[2][0] * b[3][0] + a[2][1] * b[3][1] + a[2][2] * b[3][2] + a[2][3] * b[3][3];
 
-    rows[3][0] = a[3][0] * b[0][0] + a[3][1] * b[1][0] + a[3][2] * b[2][0] + a[3][3] * b[3][0];
-    rows[3][1] = a[3][0] * b[0][1] + a[3][1] * b[1][1] + a[3][2] * b[2][1] + a[3][3] * b[3][1];
-    rows[3][2] = a[3][0] * b[0][2] + a[3][1] * b[1][2] + a[3][2] * b[2][2] + a[3][3] * b[3][2];
-    rows[3][3] = a[3][0] * b[0][3] + a[3][1] * b[1][3] + a[3][2] * b[2][3] + a[3][3] * b[3][3];
+    rows[3][0] = a[3][0] * b[0][0] + a[3][1] * b[0][1] + a[3][2] * b[0][2] + a[3][3] * b[0][3];
+    rows[3][1] = a[3][0] * b[1][0] + a[3][1] * b[1][1] + a[3][2] * b[1][2] + a[3][3] * b[1][3];
+    rows[3][2] = a[3][0] * b[2][0] + a[3][1] * b[2][1] + a[3][2] * b[2][2] + a[3][3] * b[2][3];
+    rows[3][3] = a[3][0] * b[3][0] + a[3][1] * b[3][1] + a[3][2] * b[3][2] + a[3][3] * b[3][3];
   }
 
 
@@ -3551,7 +3713,7 @@ namespace minipbrt {
     if (allTris) {
       if (faces.type == PLYPropertyType::Int || faces.type == PLYPropertyType::UInt) {
         // All faces are triangles and have a type compatible with trimesh indices.
-        std::memcpy(trimesh->indices, faces.listData.data(), sizeof(int) * numTriangles);
+        std::memcpy(trimesh->indices, faces.listData.data(), sizeof(int) * trimesh->num_indices);
       }
       else {
         // All faces are triangles but the indices require type conversion.
@@ -3857,7 +4019,7 @@ namespace minipbrt {
 
   Tokenizer::~Tokenizer()
   {
-    for (uint32_t i = 0; i < m_includeDepth; i++) {
+    for (uint32_t i = 0; i <= m_includeDepth; i++) {
       if (m_fileData[i].f != nullptr) {
         fclose(m_fileData[i].f);
       }
@@ -4686,6 +4848,9 @@ namespace minipbrt {
   bool Parser::parse_Translate()
   {
     float args[3];
+    for (uint32_t i = 0; i < 3; i++) {
+      args[i] = float_arg(i);
+    }
     m_transforms->translate(args);
     return true;
   }
@@ -4745,7 +4910,7 @@ namespace minipbrt {
 
   bool Parser::parse_Transform()
   {
-    float args[16]; // mat4, row major
+    float args[16]; // mat4, *column* major
     for (uint32_t i = 0; i < 16; i++) {
       args[i] = float_arg(i);
     }
@@ -4756,7 +4921,7 @@ namespace minipbrt {
 
   bool Parser::parse_ConcatTransform()
   {
-    float args[16]; // mat4, row major
+    float args[16]; // mat4, *column* major
     for (uint32_t i = 0; i < 16; i++) {
       args[i] = float_arg(i);
     }
@@ -5180,6 +5345,7 @@ namespace minipbrt {
     shape->insideMedium = m_attrs->top->insideMedium;
     shape->outsideMedium = m_attrs->top->outsideMedium;
     shape->reverseOrientation = m_attrs->top->reverseOrientation;
+    shape->instanced = m_activeObject != kInvalidIndex;
 
     // Check whether the shape is overriding any properties of the active material
     if (shape->material != kInvalidIndex) {

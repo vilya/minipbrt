@@ -51,6 +51,10 @@ Improved error handling:
 Performance
 -----------
 
+Objects don't need to keep an array of shape indices
+- Shapes which belong to the same object will always be contiguous in the shape list
+- Can just store a start index and either an end index or a count.
+
 Reduce memory usage while parsing large attribute values, e.g. the vertex and
 index arrays for a large triangle mesh.
 

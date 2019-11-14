@@ -1015,6 +1015,7 @@ namespace minipbrt {
     uint32_t insideMedium   = kInvalidIndex;
     uint32_t outsideMedium  = kInvalidIndex;
     bool reverseOrientation = false;
+    bool instanced          = false;
 
     virtual ~Shape() {}
     virtual ShapeType type() const = 0;

@@ -714,25 +714,6 @@ namespace minipbrt {
 
 
   //
-  // Vec4 type
-  //
-
-  struct Vec4 {
-    float x, y, z, w;
-
-    float  operator [] (int idx) const { return (&x)[idx]; }
-    float& operator [] (int idx)       { return (&x)[idx]; }
-  };
-
-  static inline Vec4 operator + (Vec4 lhs, Vec4 rhs) { return Vec4{ lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z, lhs.w + rhs.w }; }
-  static inline Vec4 operator - (Vec4 lhs, Vec4 rhs) { return Vec4{ lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z, lhs.w - rhs.w }; }
-  static inline Vec4 operator * (Vec4 lhs, Vec4 rhs) { return Vec4{ lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z, lhs.w * rhs.w }; }
-  static inline Vec4 operator / (Vec4 lhs, Vec4 rhs) { return Vec4{ lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z, lhs.w / rhs.w }; }
-
-  static inline float dot(Vec4 lhs, Vec4 rhs) { return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z + lhs.w * rhs.w; }
-
-
-  //
   // Mat4 type
   //
 
@@ -1910,7 +1891,8 @@ namespace minipbrt {
     if (entry == kMaxTransformStackEntry) {
       return false;
     }
-    std::memcpy(matrices[entry + 1], matrices[entry], sizeof(Mat4) * 2);
+    matrices[entry + 1][0] = matrices[entry][0];
+    matrices[entry + 1][1] = matrices[entry][1];
     ++entry;
     return true;
   }
@@ -3427,6 +3409,22 @@ namespace minipbrt {
 
 
   //
+  // Shape methods
+  //
+
+  void Shape::copy_common_properties(const Shape* other)
+  {
+    shapeToWorld       = other->shapeToWorld;
+    material           = other->material;
+    areaLight          = other->areaLight;
+    insideMedium       = other->insideMedium;
+    outsideMedium      = other->outsideMedium;
+    reverseOrientation = other->reverseOrientation;
+    instanced          = other->instanced;
+  }
+
+
+  //
   // HeightField methods
   //
 
@@ -3465,6 +3463,8 @@ namespace minipbrt {
       }
     }
 
+    trimesh->copy_common_properties(this);
+
     return trimesh;
   }
 
@@ -3486,6 +3486,8 @@ namespace minipbrt {
     trimesh->num_indices = num_indices;
     trimesh->indices = new int[num_indices];
     std::memcpy(trimesh->indices, indices, sizeof(int) * num_indices);
+
+    trimesh->copy_common_properties(this);
 
     return trimesh;
   }
@@ -3534,6 +3536,8 @@ namespace minipbrt {
         dst += 6;
       }
     }
+
+    trimesh->copy_common_properties(this);
 
     return trimesh;
   }
@@ -3832,8 +3836,6 @@ namespace minipbrt {
       return nullptr;
     }
 
-//    fprintf(stderr, "Opening PLY mesh %s\n", filename);
-
     TriangleMesh* trimesh = new TriangleMesh();
     bool gotVerts = false;
     bool gotFaces = false;
@@ -3861,14 +3863,10 @@ namespace minipbrt {
       return nullptr;
     }
 
-    trimesh->shapeToWorld = shapeToWorld;
-    trimesh->material = material;
-    trimesh->areaLight = areaLight;
-    trimesh->insideMedium = insideMedium;
-    trimesh->outsideMedium = outsideMedium;
-    trimesh->reverseOrientation = reverseOrientation;
+    trimesh->copy_common_properties(this);
     trimesh->alpha = alpha;
     trimesh->shadowalpha = shadowalpha;
+
     return trimesh;
   }
 

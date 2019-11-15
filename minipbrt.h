@@ -1020,6 +1020,8 @@ namespace minipbrt {
     virtual ~Shape() {}
     virtual ShapeType type() const = 0;
     virtual TriangleMesh* triangle_mesh() const { return nullptr; }
+
+    void copy_common_properties(const Shape* other);
   };
 
 

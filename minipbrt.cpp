@@ -1715,103 +1715,48 @@ namespace minipbrt {
 
   void Mat4::lookAt(const float params[9])
   {
+    // This implementation could be made faster, but lookAt will usually only
+    // be called no more than once per input file so raw speed isn't as
+    // important as keeping the code clear in this case.
+
     Vec3 pos{ params[0], params[1], params[2] };
     Vec3 dir = normalize(Vec3{ params[3], params[4], params[5] } - pos);
     Vec3 up  = normalize(Vec3{ params[6], params[7], params[8] });
 
-    Vec3 xAxis = normalize(cross(dir, up));
-    Vec3 yAxis = normalize(cross(xAxis, dir));
+    Vec3 xAxis = normalize(cross(up, dir));
+    Vec3 yAxis = normalize(cross(dir, xAxis));
+
+    Mat4 m;
+    m.rows[0][0] = xAxis.x;
+    m.rows[1][0] = xAxis.y;
+    m.rows[2][0] = xAxis.z;
+    m.rows[3][0] = 0.0f;
+
+    m.rows[0][1] = yAxis.x;
+    m.rows[1][1] = yAxis.y;
+    m.rows[2][1] = yAxis.z;
+    m.rows[3][1] = 0.0f;
+
+    m.rows[0][2] = dir.x;
+    m.rows[1][2] = dir.y;
+    m.rows[2][2] = dir.z;
+    m.rows[3][2] = 0.0f;
+
+    m.rows[0][3] = pos.x;
+    m.rows[1][3] = pos.y;
+    m.rows[2][3] = pos.z;
+    m.rows[3][3] = 1.0f;
+
+    m = inverse(m);
 
     float a[4][4];
     std::memcpy(a, rows, sizeof(a));
 
-    /*
-      this =
-        a b c d
-        e f g h
-        i j k l
-        m n o p
-
-      W =
-        xx  yx  dx  px
-        xy  yy  dy  py
-        xz  yz  dz  pz
-        0   0   0   1
-
-      Note that W is the camera to world transform. We need the world to
-      camera transform so must take its inverse, which Mathematica says is
-
-      det(W) = -dz xy yx + dy xz yx + dz xx yy - dx xz yy - dy xx yz + dx xy yz
-             = -((dz xy - dy xz) yx + (dx xz - dz xx) yy + (dy xx - dx xy) yz)
-             = -dot(cross(xAxis, dir), yAxis)
-
-      inv(W) = (1 / det(W)) *
-        ( dz yy - dy yz)   (-dz yx + dx yz)    ( dy yx - dx yy)    ( dz py yx - dy pz yx - dz px yy + dx pz yy + dy px yz - dx py yz)
-        (-dz xy + dy xz)   ( dz xx - dx xz)    (-dy xx + dx xy)    (-dz py xx + dy pz xx + dz px xy - dx pz xy - dy px xz + dx py xz)
-        (-xz yy + xy yz)   ( xz yx - xx yz)    (-xy yx + xx yy)    ( pz xy yx - py xz yx - pz xx yy + px xz yy + py xx yz - px xy yz)
-        0                  0                   0                   (-dz xy yx + dy xz yx + dz xx yy - dx xz yy - dy xx yz + dx xy yz)
-
-      The values in the final column can be factored a bit more:
-
-        ( dz py yx - dy pz yx - dz px yy + dx pz yy + dy px yz - dx py yz) =>   (dz py - dy pz) yx + (dx pz - dz px) yy + (dy px - dx py) yz  =>  dot(cross(pos,   dir), yAxis)
-        (-dz py xx + dy pz xx + dz px xy - dx pz xy - dy px xz + dx py xz) => -((dz py - dy pz) xx + (dx pz - dz px) xy + (dy px - dx py) xz) => -dot(cross(pos,   dir), xAxis)
-        ( pz xy yx - py xz yx - pz xx yy + px xz yy + py xx yz - px xy yz) =>   (pz xy - py xz) yx + (px xz - pz xx) yy + (py xx - px xy) yz  =>  dot(cross(xAxis, pos), yAxis)
-        (-dz xy yx + dy xz yx + dz xx yy - dx xz yy - dy xx yz + dx xy yz) => -((dz xy - dy xz) yx + (dx xz - dz xx) yy + (dy xx - dx xy) yz) => -dot(cross(xAxis, dir), yAxis)
-
-      Likewise, the values in the upper left 3x3 submatrix are all components of the following cross products:
-
-         cross(yAxis, dir)
-        -cross(xAxis, dir)
-         cross(xAxis, yAxis)
-
-      Note also that 
-
-        -cross(xAxis, dir) = cross(dir, xAxis) = yAxis
-         cross(xAxis, dir) = -yAxis
-         cross(xAxis, yAxis) = dir
-         cross(yAxis, dir) = xAxis
-      
-      And therefore
-
-        -dot(cross(xAxis, dir), yAxis) = -dot(-yAxis, yAxis) = dot(yAxis, yAxis) = lengthsqr(yAxis) = 1
-
-      Giving us
-
-      inv(W) =
-        xaxis.x   xaxis.y   xaxis.z    dot(cross(pos,   dir), yAxis)
-        yaxis.x   yaxis.y   yaxis.z   -dot(cross(pos,   dir), xAxis)
-        dir.x     dir.y     dir.z      dot(cross(xAxis, pos), yAxis)
-        0         0         0          1
-
-      Now we simply post-multiply `this` by inv(W).
-    */
-
-    Vec3 PcrossD = cross(pos, dir);
-    Vec3 XcrossP = cross(xAxis, pos);
-
-    float xAxisW =  dot(PcrossD, yAxis);
-    float yAxisW = -dot(PcrossD, xAxis);
-    float dirW   =  dot(XcrossP, yAxis);
-
-    rows[0][0] = a[0][0] * xAxis.x + a[0][1] * yAxis.x + a[0][2] * dir.x;
-    rows[0][1] = a[0][0] * xAxis.y + a[0][1] * yAxis.y + a[0][2] * dir.y;
-    rows[0][2] = a[0][0] * xAxis.z + a[0][1] * yAxis.z + a[0][2] * dir.z;
-    rows[0][3] = a[0][0] * xAxisW  + a[0][1] * yAxisW  + a[0][2] * dirW + a[0][3];
-
-    rows[1][0] = a[1][0] * xAxis.x + a[1][1] * yAxis.x + a[1][2] * dir.x;
-    rows[1][1] = a[1][0] * xAxis.y + a[1][1] * yAxis.y + a[1][2] * dir.y;
-    rows[1][2] = a[1][0] * xAxis.z + a[1][1] * yAxis.z + a[1][2] * dir.z;
-    rows[1][3] = a[1][0] * xAxisW  + a[1][1] * yAxisW  + a[1][2] * dirW + a[1][3];
-
-    rows[2][0] = a[2][0] * xAxis.x + a[2][1] * yAxis.x + a[2][2] * dir.x;
-    rows[2][1] = a[2][0] * xAxis.y + a[2][1] * yAxis.y + a[2][2] * dir.y;
-    rows[2][2] = a[2][0] * xAxis.z + a[2][1] * yAxis.z + a[2][2] * dir.z;
-    rows[2][3] = a[2][0] * xAxisW  + a[2][1] * yAxisW  + a[2][2] * dirW + a[2][3];
-
-    rows[3][0] = a[3][0] * xAxis.x + a[3][1] * yAxis.x + a[3][2] * dir.x;
-    rows[3][1] = a[3][0] * xAxis.y + a[3][1] * yAxis.y + a[3][2] * dir.y;
-    rows[3][2] = a[3][0] * xAxis.z + a[3][1] * yAxis.z + a[3][2] * dir.z;
-    rows[3][3] = a[3][0] * xAxisW  + a[3][1] * yAxisW  + a[3][2] * dirW + a[3][3];
+    for (int r = 0; r < 4; r++) {
+      for (int c = 0; c < 4; c++) {
+        rows[r][c] = a[r][0] * m.rows[0][c] + a[r][1] * m.rows[1][c] + a[r][2] * m.rows[2][c] + a[r][3] * m.rows[3][c];
+      }
+    }
   }
 
 

@@ -714,6 +714,25 @@ namespace minipbrt {
 
 
   //
+  // Vec4 type
+  //
+
+  struct Vec4 {
+    float x, y, z, w;
+
+    float  operator [] (int idx) const { return (&x)[idx]; }
+    float& operator [] (int idx)       { return (&x)[idx]; }
+  };
+
+  static inline Vec4 operator + (Vec4 lhs, Vec4 rhs) { return Vec4{ lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z, lhs.w + rhs.w }; }
+  static inline Vec4 operator - (Vec4 lhs, Vec4 rhs) { return Vec4{ lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z, lhs.w - rhs.w }; }
+  static inline Vec4 operator * (Vec4 lhs, Vec4 rhs) { return Vec4{ lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z, lhs.w * rhs.w }; }
+  static inline Vec4 operator / (Vec4 lhs, Vec4 rhs) { return Vec4{ lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z, lhs.w / rhs.w }; }
+
+  static inline float dot(Vec4 lhs, Vec4 rhs) { return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z + lhs.w * rhs.w; }
+
+
+  //
   // Mat4 type
   //
 
@@ -728,6 +747,8 @@ namespace minipbrt {
     void transform(const float params[16]);       //!< Set this to the given matrix.
     void concatTransform(const float params[16]); //!< Multiply this matrix by the given matrix.
   };
+
+  static Mat4 inverse(const Mat4& m);
 
 
   //
@@ -1694,21 +1715,12 @@ namespace minipbrt {
 
   void Mat4::lookAt(const float params[9])
   {
-    float pos[3] = { params[0], params[1], params[2] };
-    float dir[3] = { params[3] - params[0], params[4] - params[1], params[5] - params[2] };
-    float up[3]  = { params[6], params[7], params[8] };
+    Vec3 pos{ params[0], params[1], params[2] };
+    Vec3 dir = normalize(Vec3{ params[3], params[4], params[5] } - pos);
+    Vec3 up  = normalize(Vec3{ params[6], params[7], params[8] });
 
-    // Make sure both `dir` and `up` are normalized.
-    normalize_in_place(dir);
-    normalize_in_place(up);
-
-    float xAxis[3];
-    cross(up, dir, xAxis);
-    normalize_in_place(xAxis);
-
-    float yAxis[3];
-    cross(dir, xAxis, yAxis);
-    normalize_in_place(yAxis);
+    Vec3 xAxis = normalize(cross(dir, up));
+    Vec3 yAxis = normalize(cross(xAxis, dir));
 
     float a[4][4];
     std::memcpy(a, rows, sizeof(a));
@@ -1774,34 +1786,32 @@ namespace minipbrt {
       Now we simply post-multiply `this` by inv(W).
     */
 
-    float PcrossD[3];
-    float XcrossP[3];
-    cross(pos, dir, PcrossD);
-    cross(xAxis, dir, XcrossP);
+    Vec3 PcrossD = cross(pos, dir);
+    Vec3 XcrossP = cross(xAxis, pos);
 
     float xAxisW =  dot(PcrossD, yAxis);
     float yAxisW = -dot(PcrossD, xAxis);
     float dirW   =  dot(XcrossP, yAxis);
 
-    rows[0][0] = a[0][0] * xAxis[0] + a[0][1] * yAxis[0] + a[0][2] * dir[0];
-    rows[0][1] = a[0][0] * xAxis[1] + a[0][1] * yAxis[1] + a[0][2] * dir[1];
-    rows[0][2] = a[0][0] * xAxis[2] + a[0][1] * yAxis[2] + a[0][2] * dir[2];
-    rows[0][3] = a[0][0] * xAxisW   + a[0][1] * yAxisW   + a[0][2] * dirW + a[0][3];
+    rows[0][0] = a[0][0] * xAxis.x + a[0][1] * yAxis.x + a[0][2] * dir.x;
+    rows[0][1] = a[0][0] * xAxis.y + a[0][1] * yAxis.y + a[0][2] * dir.y;
+    rows[0][2] = a[0][0] * xAxis.z + a[0][1] * yAxis.z + a[0][2] * dir.z;
+    rows[0][3] = a[0][0] * xAxisW  + a[0][1] * yAxisW  + a[0][2] * dirW + a[0][3];
 
-    rows[1][0] = a[1][0] * xAxis[0] + a[1][1] * yAxis[0] + a[1][2] * dir[0];
-    rows[1][1] = a[1][0] * xAxis[1] + a[1][1] * yAxis[1] + a[1][2] * dir[1];
-    rows[1][2] = a[1][0] * xAxis[2] + a[1][1] * yAxis[2] + a[1][2] * dir[2];
-    rows[1][3] = a[1][0] * xAxisW   + a[1][1] * yAxisW   + a[1][2] * dirW + a[1][3];
+    rows[1][0] = a[1][0] * xAxis.x + a[1][1] * yAxis.x + a[1][2] * dir.x;
+    rows[1][1] = a[1][0] * xAxis.y + a[1][1] * yAxis.y + a[1][2] * dir.y;
+    rows[1][2] = a[1][0] * xAxis.z + a[1][1] * yAxis.z + a[1][2] * dir.z;
+    rows[1][3] = a[1][0] * xAxisW  + a[1][1] * yAxisW  + a[1][2] * dirW + a[1][3];
 
-    rows[2][0] = a[2][0] * xAxis[0] + a[2][1] * yAxis[0] + a[2][2] * dir[0];
-    rows[2][1] = a[2][0] * xAxis[1] + a[2][1] * yAxis[1] + a[2][2] * dir[1];
-    rows[2][2] = a[2][0] * xAxis[2] + a[2][1] * yAxis[2] + a[2][2] * dir[2];
-    rows[2][3] = a[2][0] * xAxisW   + a[2][1] * yAxisW   + a[2][2] * dirW + a[2][3];
+    rows[2][0] = a[2][0] * xAxis.x + a[2][1] * yAxis.x + a[2][2] * dir.x;
+    rows[2][1] = a[2][0] * xAxis.y + a[2][1] * yAxis.y + a[2][2] * dir.y;
+    rows[2][2] = a[2][0] * xAxis.z + a[2][1] * yAxis.z + a[2][2] * dir.z;
+    rows[2][3] = a[2][0] * xAxisW  + a[2][1] * yAxisW  + a[2][2] * dirW + a[2][3];
 
-    rows[3][0] = a[3][0] * xAxis[0] + a[3][1] * yAxis[0] + a[3][2] * dir[0];
-    rows[3][1] = a[3][0] * xAxis[1] + a[3][1] * yAxis[1] + a[3][2] * dir[1];
-    rows[3][2] = a[3][0] * xAxis[2] + a[3][1] * yAxis[2] + a[3][2] * dir[2];
-    rows[3][3] = a[3][0] * xAxisW   + a[3][1] * yAxisW   + a[3][2] * dirW + a[3][3];
+    rows[3][0] = a[3][0] * xAxis.x + a[3][1] * yAxis.x + a[3][2] * dir.x;
+    rows[3][1] = a[3][0] * xAxis.y + a[3][1] * yAxis.y + a[3][2] * dir.y;
+    rows[3][2] = a[3][0] * xAxis.z + a[3][1] * yAxis.z + a[3][2] * dir.z;
+    rows[3][3] = a[3][0] * xAxisW  + a[3][1] * yAxisW  + a[3][2] * dirW + a[3][3];
   }
 
 
@@ -1860,6 +1870,70 @@ namespace minipbrt {
     rows[3][1] = a[3][0] * b[1][0] + a[3][1] * b[1][1] + a[3][2] * b[1][2] + a[3][3] * b[1][3];
     rows[3][2] = a[3][0] * b[2][0] + a[3][1] * b[2][1] + a[3][2] * b[2][2] + a[3][3] * b[2][3];
     rows[3][3] = a[3][0] * b[3][0] + a[3][1] * b[3][1] + a[3][2] * b[3][2] + a[3][3] * b[3][3];
+  }
+
+
+  // Determinant of the 2x2 matrix formed from rows r0,r1 and columns c0,c1 of
+  // a 4x4 matrix. This is a helper method used for calculating the inverse of
+  // the 4x4 matrix.
+  static inline float det2x2(const Mat4& m, int r0, int r1, int c0, int c1)
+  {
+    return m.rows[r0][c0] * m.rows[r1][c1] - m.rows[r0][c1] * m.rows[r1][c0];
+  }
+
+
+  Mat4 inverse(const Mat4& m)
+  {
+    float A = det2x2(m, 2, 3, 2, 3);
+    float B = det2x2(m, 2, 3, 1, 3);
+    float C = det2x2(m, 2, 3, 1, 2);
+    float D = det2x2(m, 2, 3, 0, 3);
+    float E = det2x2(m, 2, 3, 0, 2);
+    float F = det2x2(m, 2, 3, 0, 1);
+    float G = det2x2(m, 1, 3, 2, 3);
+    float H = det2x2(m, 1, 3, 1, 3);
+    float I = det2x2(m, 1, 3, 1, 2);
+    float J = det2x2(m, 1, 3, 0, 3);
+    float K = det2x2(m, 1, 3, 0, 2);
+    float L = det2x2(m, 1, 3, 0, 1);
+    float M = det2x2(m, 1, 2, 2, 3);
+    float N = det2x2(m, 1, 2, 1, 3);
+    float O = det2x2(m, 1, 2, 1, 2);
+    float P = det2x2(m, 1, 2, 0, 3);
+    float Q = det2x2(m, 1, 2, 0, 2);
+    float R = det2x2(m, 1, 2, 0, 1);
+
+    Mat4 inv;
+
+    inv.rows[0][0] = +(m.rows[1][1] * A - m.rows[1][2] * B + m.rows[1][3] * C);
+    inv.rows[0][1] = -(m.rows[0][1] * A - m.rows[0][2] * B + m.rows[0][3] * C);
+    inv.rows[0][2] = +(m.rows[0][1] * G - m.rows[0][2] * H + m.rows[0][3] * I);
+    inv.rows[0][3] = -(m.rows[0][1] * M - m.rows[0][2] * N + m.rows[0][3] * O);
+
+    inv.rows[1][0] = -(m.rows[1][0] * A - m.rows[1][2] * D + m.rows[1][3] * E);
+    inv.rows[1][1] = +(m.rows[0][0] * A - m.rows[0][2] * D + m.rows[0][3] * E);
+    inv.rows[1][2] = -(m.rows[0][0] * G - m.rows[0][2] * J + m.rows[0][3] * K);
+    inv.rows[1][3] = +(m.rows[0][0] * M - m.rows[0][2] * P + m.rows[0][3] * Q);
+
+    inv.rows[2][0] = +(m.rows[1][0] * C - m.rows[1][1] * D + m.rows[1][3] * F);
+    inv.rows[2][1] = -(m.rows[0][0] * B - m.rows[0][1] * D + m.rows[0][3] * F);
+    inv.rows[2][2] = +(m.rows[0][0] * H - m.rows[0][1] * J + m.rows[0][3] * L);
+    inv.rows[2][3] = -(m.rows[0][0] * N - m.rows[0][1] * P + m.rows[0][3] * R);
+
+    inv.rows[3][0] = -(m.rows[1][0] * C - m.rows[1][1] * E + m.rows[1][2] * F);
+    inv.rows[3][1] = +(m.rows[0][0] * C - m.rows[0][1] * E + m.rows[0][2] * F);
+    inv.rows[3][2] = -(m.rows[0][0] * I - m.rows[0][1] * K + m.rows[0][2] * L);
+    inv.rows[3][3] = +(m.rows[0][0] * O - m.rows[0][1] * Q + m.rows[0][2] * R);
+
+    float detA = 1.0f / (inv.rows[0][0] + inv.rows[1][0] + inv.rows[2][0] + inv.rows[3][0]);
+
+    for (int r = 0; r < 4; r++) {
+      for (int c = 0; c < 4; c++) {
+        inv.rows[r][c] *= detA;
+      }
+    }
+    
+    return inv;
   }
 
 
@@ -6463,7 +6537,8 @@ namespace minipbrt {
       return false;
     }
 
-    save_current_transform_matrices(&camera->worldToCamera);
+    save_inverse_transform_matrices(&camera->cameraToWorld);
+
     float_param("shutteropen", &camera->shutteropen);
     float_param("shutterclose", &camera->shutterclose);
 
@@ -6765,7 +6840,7 @@ namespace minipbrt {
     // Setup defaults for any scene-wide items that haven't been specified.
     if (m_scene->camera == nullptr) {
       m_scene->camera = new PerspectiveCamera();
-      save_current_transform_matrices(&m_scene->camera->worldToCamera); // Initialise the camera transform to identity.
+      save_inverse_transform_matrices(&m_scene->camera->cameraToWorld); // Initialise the camera transform to identity.
       m_transforms->coordinateSystem("camera");
     }
     if (m_scene->sampler == nullptr) {
@@ -7476,6 +7551,16 @@ namespace minipbrt {
     assert(dest != nullptr);
     std::memcpy(dest->start, m_transforms->matrices[m_transforms->entry][0].rows, sizeof(float) * 16);
     std::memcpy(dest->end, m_transforms->matrices[m_transforms->entry][1].rows, sizeof(float) * 16);
+  }
+
+
+  void Parser::save_inverse_transform_matrices(Transform* dest) const
+  {
+    assert(dest != nullptr);
+    Mat4 inv[2] = { inverse(m_transforms->matrices[m_transforms->entry][0]),
+                    inverse(m_transforms->matrices[m_transforms->entry][1]) };
+    std::memcpy(dest->start, inv[0].rows, sizeof(float) * 16);
+    std::memcpy(dest->end,   inv[1].rows, sizeof(float) * 16);
   }
 
 

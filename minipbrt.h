@@ -275,7 +275,7 @@ namespace minipbrt {
 
 
   struct Camera {
-    Transform worldToCamera;
+    Transform cameraToWorld;
     float shutteropen  = 0.0f;
     float shutterclose = 1.0f;
 
@@ -1731,6 +1731,7 @@ namespace minipbrt {
     }
 
     void save_current_transform_matrices(Transform* dest) const;
+    void save_inverse_transform_matrices(Transform* dest) const;
 
     uint32_t find_object(const char* name) const;
     uint32_t find_medium(const char* name) const;

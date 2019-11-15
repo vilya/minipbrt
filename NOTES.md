@@ -103,7 +103,7 @@ c02 = det(minor(a, 0, 2))
 c02 = det(a10 a11 a13
 		  a20 a21 a23
 		  a30 a31 a33)
-c02 = a10 * det(m23,12) - a11 * det(m23,03) + a13 * det(m23,01)
+c02 = a10 * det(m23,13) - a11 * det(m23,03) + a13 * det(m23,01)
 
 c03 = det(minor(a, 0, 3))
 c03 = det(a10 a11 a12
@@ -189,7 +189,7 @@ So the cofactor matrix entries are:
 
 	c00 = a11 * det(m23,23) - a12 * det(m23,13) + a13 * det(m23,12)
 	c01 = a10 * det(m23,23) - a12 * det(m23,03) + a13 * det(m23,02)
-	c02 = a10 * det(m23,12) - a11 * det(m23,03) + a13 * det(m23,01)
+	c02 = a10 * det(m23,13) - a11 * det(m23,03) + a13 * det(m23,01)
 	c03 = a10 * det(m23,12) - a11 * det(m23,02) + a12 * det(m23,01)
 
 	c10 = a01 * det(m23,23) - a02 * det(m23,13) + a03 * det(m23,12)
@@ -233,7 +233,7 @@ Then we get:
 
 	c00 = +(a11 * A - a12 * B + a13 * C)
 	c01 = -(a10 * A - a12 * D + a13 * E)
-	c02 = +(a10 * C - a11 * D + a13 * F)
+	c02 = +(a10 * B - a11 * D + a13 * F)
 	c03 = -(a10 * C - a11 * E + a12 * F)
 
 	c10 = -(a01 * A - a02 * B + a03 * C)
@@ -251,8 +251,9 @@ Then we get:
 	c32 = -(a00 * N - a01 * P + a03 * R)
 	c33 = +(a00 * O - a01 * Q + a02 * R)
 
-The determinant of the matrix is the sum of the first row of the cofactor
-matrix, which is the first column of the adjugate.
+The determinant of the matrix is the dot product of the first row of the
+cofactor matrix, which is the first column of the adjugate, with the first row
+of the input matrix.
 	
 So to calculate the inverse:
 
@@ -276,6 +277,6 @@ So to calculate the inverse:
 	inv32 = -(a00 * I - a01 * K + a02 * L)
 	inv33 = +(a00 * O - a01 * Q + a02 * R)
 
-	detA = i00 + i10 + i20 + i30
+	detA = a00 * inv00 + a01 * inv10 + a02 * inv20 + inv30
 
 	inv /= detA

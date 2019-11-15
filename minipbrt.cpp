@@ -1915,7 +1915,7 @@ namespace minipbrt {
     inv.rows[1][2] = -(m.rows[0][0] * G - m.rows[0][2] * J + m.rows[0][3] * K);
     inv.rows[1][3] = +(m.rows[0][0] * M - m.rows[0][2] * P + m.rows[0][3] * Q);
 
-    inv.rows[2][0] = +(m.rows[1][0] * C - m.rows[1][1] * D + m.rows[1][3] * F);
+    inv.rows[2][0] = +(m.rows[1][0] * B - m.rows[1][1] * D + m.rows[1][3] * F);
     inv.rows[2][1] = -(m.rows[0][0] * B - m.rows[0][1] * D + m.rows[0][3] * F);
     inv.rows[2][2] = +(m.rows[0][0] * H - m.rows[0][1] * J + m.rows[0][3] * L);
     inv.rows[2][3] = -(m.rows[0][0] * N - m.rows[0][1] * P + m.rows[0][3] * R);
@@ -1925,11 +1925,15 @@ namespace minipbrt {
     inv.rows[3][2] = -(m.rows[0][0] * I - m.rows[0][1] * K + m.rows[0][2] * L);
     inv.rows[3][3] = +(m.rows[0][0] * O - m.rows[0][1] * Q + m.rows[0][2] * R);
 
-    float detA = 1.0f / (inv.rows[0][0] + inv.rows[1][0] + inv.rows[2][0] + inv.rows[3][0]);
+    float det = m.rows[0][0] * inv.rows[0][0] +
+                m.rows[0][1] * inv.rows[1][0] +
+                m.rows[0][2] * inv.rows[2][0] +
+                m.rows[0][3] * inv.rows[3][0];
+    float invDet = 1.0f / det;
 
     for (int r = 0; r < 4; r++) {
       for (int c = 0; c < 4; c++) {
-        inv.rows[r][c] *= detA;
+        inv.rows[r][c] *= invDet;
       }
     }
     

@@ -746,12 +746,12 @@ int main(int argc, char** argv)
     return EXIT_SUCCESS;
   }
   else if (filenames.size() == 1) {
-    minipbrt::Parser parser;
-    bool ok = parser.parse(filenames.front().c_str());
-    bool plyOK = ok ? parser.borrow_scene()->load_all_ply_meshes() : false;
+    minipbrt::Loader loader;
+    bool ok = loader.load(filenames.front().c_str());
+    bool plyOK = ok ? loader.borrow_scene()->load_all_ply_meshes() : false;
 
     if (!ok) {
-      minipbrt::print_error(parser.get_error());
+      minipbrt::print_error(loader.error());
       return EXIT_FAILURE;
     }
     else if (!plyOK) {
@@ -759,7 +759,7 @@ int main(int argc, char** argv)
       return EXIT_FAILURE;
     }
     else {
-      minipbrt::print_scene_info(parser.borrow_scene());
+      minipbrt::print_scene_info(loader.borrow_scene());
       return EXIT_SUCCESS;
     }
   }
@@ -778,9 +778,9 @@ int main(int argc, char** argv)
     for (const std::string& filename : filenames) {
       minipbrt::Timer timer(true); // true ==> autostart the timer.
 
-      minipbrt::Parser parser;
-      bool ok = parser.parse(filename.c_str());
-      bool plyOK = ok ? parser.borrow_scene()->load_all_ply_meshes() : false;
+      minipbrt::Loader loader;
+      bool ok = loader.load(filename.c_str());
+      bool plyOK = ok ? loader.borrow_scene()->load_all_ply_meshes() : false;
 
       timer.stop();
       printf("%-*s  %s  %8.3lf secs",
@@ -788,7 +788,7 @@ int main(int argc, char** argv)
              (ok && plyOK) ? "passed" : "FAILED",
              timer.elapsedSecs());
       if (!ok) {
-        const minipbrt::Error* err = parser.get_error();
+        const minipbrt::Error* err = loader.error();
         printf(" ---> [%s, line %lld, column %lld] %s\n", err->filename(), err->line(), err->column(), err->message());
         ++numFailed;
       }

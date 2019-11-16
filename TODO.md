@@ -19,13 +19,13 @@ Features
 Expose the API for extracting data from PLY files to end users.
 
 Add functions for converting other shapes into a TriangleMesh:
-[ ] Cone
-[ ] Curve
-[ ] Cylinder
-[ ] Disk
-[ ] Hyperboloid
-[ ] Paraboloid
-[ ] Sphere
+* [ ] Cone
+* [ ] Curve
+* [ ] Cylinder
+* [ ] Disk
+* [ ] Hyperboloid
+* [ ] Paraboloid
+* [ ] Sphere
 
 Strict mode vs. permissive mode
 * Strict mode errors on unknown statements/parameters, permissive mode ignores
@@ -55,6 +55,7 @@ Reduce memory usage for the in-memory scene representation:
 - Use a disk cache.
 
 Reduce overall number of memory allocations.
+- Parsing itself doesn't do very many, but constructing the scene representation does a lot.
 
 Improve IO performance:
 - Use a background thread and/or async I/O calls to load the next buffer while

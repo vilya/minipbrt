@@ -203,6 +203,51 @@ namespace minipbrt {
 
 
   //
+  // Material parameters
+  //
+
+  // These are used when checking whether a shape has any parameters which
+  // override values on its material. We assume that any spectrum or texture
+  // parameter is a material override. For float parameters we need to check
+  // the parameter names to be sure, because lots of shapes have float
+  // parameters of their own.
+
+  static const char* kFloatParams_DisneyMaterial[]       = { "anisotropic", "clearcoat", "clearcoatgloss", "eta", "metallic", "sheen", "roughness", "sheen", "sheentint", "spectrans", "speculartint", nullptr };
+  static const char* kFloatParams_FourierMaterial[]      = { nullptr };
+  static const char* kFloatParams_GlassMaterial[]        = { "eta", "uroughness", "vroughness", nullptr };
+  static const char* kFloatParams_HairMaterial[]         = { "eumelanin", "pheomelanin", "eta", "beta_m", "beta_n", "alpha", nullptr };
+  static const char* kFloatParams_KdSubsurfaceMaterial[] = { "eta", "uroughness", "vroughness", nullptr };
+  static const char* kFloatParams_MatteMaterial[]        = { "sigma", nullptr };
+  static const char* kFloatParams_MetalMaterial[]        = { "uroughness", "vroughness", nullptr };
+  static const char* kFloatParams_MirrorMaterial[]       = { nullptr };
+  static const char* kFloatParams_MixMaterial[]          = { nullptr };
+  static const char* kFloatParams_NoneMaterial[]         = { nullptr };
+  static const char* kFloatParams_PlasticMaterial[]      = { "roughness", nullptr };
+  static const char* kFloatParams_SubstrateMaterial[]    = { "uroughness", "vroughness", nullptr };
+  static const char* kFloatParams_SubsurfaceMaterial[]   = { "scale", "eta", "uroughness", "vroughness", nullptr };
+  static const char* kFloatParams_TranslucentMaterial[]  = { "roughness", nullptr };
+  static const char* kFloatParams_UberMaterial[]         = { "eta", "uroughness", "vroughness", nullptr };
+
+  static const char** kFloatParamsByMaterial[] = {
+    kFloatParams_DisneyMaterial,
+    kFloatParams_FourierMaterial,
+    kFloatParams_GlassMaterial,
+    kFloatParams_HairMaterial,
+    kFloatParams_KdSubsurfaceMaterial,
+    kFloatParams_MatteMaterial,
+    kFloatParams_MetalMaterial,
+    kFloatParams_MirrorMaterial,
+    kFloatParams_MixMaterial,
+    kFloatParams_NoneMaterial,
+    kFloatParams_PlasticMaterial,
+    kFloatParams_SubstrateMaterial,
+    kFloatParams_SubsurfaceMaterial,
+    kFloatParams_TranslucentMaterial,
+    kFloatParams_UberMaterial,
+  };
+
+
+  //
   // PLY constants
   //
 
@@ -254,6 +299,8 @@ namespace minipbrt {
   //
   // Constants
   //
+
+  static constexpr size_t kDefaultBufCapacity = 1024 * 1024 - 1;
 
   static const double kDoubleDigits[10] = { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0 };
 
@@ -910,6 +957,245 @@ namespace minipbrt {
     bool m_elementLoaded    = false;
     std::vector<uint8_t> m_elementData;
     std::vector<uint32_t> m_rowStarts; //!< Only used for elements where fixedSize = false.
+  };
+
+
+  //
+  // Tokenizer class declaration
+  //
+
+  class Tokenizer {
+  public:
+    Tokenizer();
+    ~Tokenizer();
+
+    /// Buffer capacity is how many chars to store in the read buffer. It
+    /// determines how much memory is allocated and the size of the blocks we
+    /// attempt to read from the input file.
+    ///
+    /// If a single token (including string literals) is larger than the buffer
+    /// capacity, tokenisation will fail.
+    void set_buffer_capacity(size_t n);
+
+    /// 0 means no include files allowed, any attempt to open an additional file will fail
+    /// 1 means the original file can include a file, but they can't include any files.
+    /// 2 means the original file can include A and A can include B, but B can't include anything.
+    /// ...and so on.
+    void set_max_include_depth(uint32_t n);
+
+    bool open_file(const char* filename);
+    bool eof() const;     //!< Is the cursor at the end of the file yet?
+    bool advance();       //!< Skip past whitespace & comments, refilling the buffer as necessary. Returns false at EOF, true otherwise.
+    bool refill_buffer(); //!< Load more data from the file, preserving the current token.
+
+    bool push_file(const char* filename, bool reportEOF); //!< Open an included file.
+    bool pop_file();                      //!< Close an included file.
+
+    /// Get the line and column number that we're up to. This is SLOW!
+    /// We compute the line number on demand by rewinding to the start of the
+    /// file and counting line numbers from there up to the current cursor
+    /// position. This means there's no line counting overhead during parsing,
+    /// you only pay the cost when you need it (usually for error reporting).
+    void cursor_location(int64_t* line, int64_t* col);
+
+    bool string_literal(char buf[], size_t bufLen);
+    bool int_literal(int* val);
+    bool float_literal(float* val);
+    bool float_array(float arr[], size_t arrLen);
+    bool identifier(char buf[], size_t bufLen);
+    bool which_directive(uint32_t* index);
+    bool which_type(uint32_t* index);
+    bool match_symbol(const char* str);
+    bool which_string_literal(const char* values[], int* index);
+    bool which_keyword(const char* values[], int* index);
+
+    size_t token_length() const;
+
+    bool advance_to_symbol(const char* str);
+
+    const char* get_filename() const;
+    const char* get_original_filename() const;
+
+    void set_error(const char* fmt, ...);
+    bool has_error() const;
+    const Error* get_error() const;
+
+  private:
+    struct FileData {
+      const char* filename = nullptr;
+      FILE* f              = nullptr;
+      bool atEOF           = false;
+      bool reportEOF       = false; // If true, advance stops at EOF of the current file and you must explicitly use pop_file to continue. If false, then we automatically call pop_file when EOF is reached.
+      int64_t bufOffset    = 0; // File offset for the start of the current buffer contents.
+    };
+
+  private:
+    FileData* m_fileData = nullptr; // Array of length `m_maxIncludeDepth + 1`;
+    uint32_t m_includeDepth = 0;
+    uint32_t m_maxIncludeDepth = 5;
+
+    char* m_buf = nullptr;
+    char* m_bufEnd = nullptr;
+    size_t m_bufCapacity = kDefaultBufCapacity;
+
+    const char* m_pos = nullptr;
+    const char* m_end = nullptr;
+
+    Error* m_error = nullptr;
+  };
+
+
+  //
+  // ParamDecl struct
+  //
+
+  typedef Bits<ParamType> ParamTypeSet;
+  static const ParamTypeSet kSpectrumTypes = ParamType::RGB | ParamType::XYZ | ParamType::Blackbody | ParamType::Samples;
+  static const ParamTypeSet kColorTextureTypes = kSpectrumTypes | ParamType::Texture;
+  static const ParamTypeSet kFloatTextureTypes = ParamType::Float | ParamType::Texture;
+
+
+  struct ParamInfo {
+    const char* name;
+    ParamType type;
+    size_t offset;  //!< Start index of the data for this param in the Parser's m_temp array.
+    uint32_t count; //!< Number of items with type `type` in the param.
+  };
+
+
+  //
+  // Parser class declaration
+  //
+
+  class Parser {
+  public:
+    Parser();
+    ~Parser();
+
+    Tokenizer& tokenizer();
+
+    bool parse(const char* filename);
+
+    bool has_error() const;
+    const Error* get_error() const;
+
+    Scene* take_scene();
+    Scene* borrow_scene();
+
+  private:
+    bool parse_Identity();
+    bool parse_Translate();
+    bool parse_Scale();
+    bool parse_Rotate();
+    bool parse_LookAt();
+    bool parse_CoordinateSystem();
+    bool parse_CoordSysTransform();
+    bool parse_Transform();
+    bool parse_ConcatTransform();
+    bool parse_ActiveTransform();
+    bool parse_MakeNamedMedium();
+    bool parse_MediumInterface();
+    bool parse_Include();
+    bool parse_AttributeBegin();
+    bool parse_AttributeEnd();
+    bool parse_Shape();
+    bool parse_AreaLightSource();
+    bool parse_LightSource();
+    bool parse_Material();
+    bool parse_MakeNamedMaterial();
+    bool parse_NamedMaterial();
+    bool parse_ObjectBegin();
+    bool parse_ObjectEnd();
+    bool parse_ObjectInstance();
+    bool parse_Texture();
+    bool parse_TransformBegin();
+    bool parse_TransformEnd();
+    bool parse_ReverseOrientation();
+    bool parse_Accelerator();
+    bool parse_Camera();
+    bool parse_Film();
+    bool parse_Integrator();
+    bool parse_PixelFilter();
+    bool parse_Sampler();
+    bool parse_TransformTimes();
+    bool parse_WorldBegin();
+    bool parse_WorldEnd();
+
+    bool parse_material_common(MaterialType materialType, const char* materialName, uint32_t* materialOut);
+    bool parse_material_overrides(const Material* baseMaterial, uint32_t* materialOut);
+    bool has_material_overrides(uint32_t matIdx) const;
+
+    bool parse_statement();
+    bool parse_args(const StatementDeclaration& statement);
+    bool parse_params();
+    bool parse_param();
+
+    bool parse_ints(uint32_t* count);
+    bool parse_floats(uint32_t* count);
+    bool parse_spectrum(uint32_t* count);
+    bool parse_strings(uint32_t* count);
+    bool parse_bools(uint32_t* count);
+
+    const char* string_arg(uint32_t index) const;
+    int enum_arg(uint32_t index) const;
+    float float_arg(uint32_t index) const;
+
+    template <class T>
+    T typed_enum_arg(uint32_t index) const {
+      return static_cast<T>(enum_arg(index));
+    }
+
+    const ParamInfo* find_param(const char* name, ParamTypeSet allowedTypes) const;
+
+    bool string_param(const char* name, char** dest, bool copy=false);
+    bool string_param_with_default(const char* name, char** dest, const char* defaultVal, bool copy=false);
+    bool filename_param(const char* name, char** dest);
+    bool bool_param(const char* name, bool* dest);
+    bool bool_param_with_default(const char* name, bool* dest, bool defaultVal);
+    bool int_param(const char* name, int* dest);
+    bool int_array_param(const char* name, uint32_t len, int* dest);
+    bool int_vector_param(const char* name, uint32_t *len, int** dest, bool copy=false);
+    bool float_param(const char* name, float* dest);
+    bool float_param_with_default(const char* name, float* dest, float defaultVal);
+    bool float_array_param(const char* name, ParamType expectedType, uint32_t len, float* dest);
+    bool float_vector_param(const char* name, ParamType expectedType, uint32_t *len, float** dest, bool copy);
+    bool spectrum_param(const char* name, float dest[3]);
+    bool texture_param(const char* name, TextureData dataType, uint32_t* dest);
+    bool float_texture_param(const char* name, FloatTex* dest);
+    bool color_texture_param(const char* name, ColorTex* dest);
+    bool float_texture_param_with_default(const char* name, FloatTex* dest, const FloatTex* defaultVal);
+    bool color_texture_param_with_default(const char *name, ColorTex *dest, const ColorTex* defaultVal);
+    bool enum_param(const char* name, const char* values[], int* dest);
+
+    template <class T>
+    bool typed_enum_param(const char* name, const char* values[], T* dest) {
+      return enum_param(name, values, reinterpret_cast<int*>(dest));
+    }
+
+    void save_current_transform_matrices(Transform* dest) const;
+    void save_inverse_transform_matrices(Transform* dest) const;
+
+    uint32_t find_object(const char* name) const;
+    uint32_t find_medium(const char* name) const;
+    uint32_t find_material(const char* name) const;
+    uint32_t find_texture(const char* name, TextureData dataType) const;
+
+    void push_bytes(void* src, size_t numBytes);
+
+  private:
+    Tokenizer m_tokenizer;
+    bool m_inWorld               = false;
+    TransformStack* m_transforms = nullptr;
+    AttributeStack* m_attrs      = nullptr;
+    uint32_t m_activeObject      = kInvalidIndex;
+    uint32_t m_firstShape        = kInvalidIndex; // Index of the first shape in the currently active object.
+
+    Scene* m_scene               = nullptr;
+
+    // Temporary storage for the current directive.
+    uint32_t m_statementIndex = uint32_t(-1);
+    std::vector<ParamInfo> m_params;
+    std::vector<uint8_t> m_temp;
   };
 
 
@@ -5847,41 +6133,6 @@ namespace minipbrt {
   }
 
 
-  static const char* kFloatParams_DisneyMaterial[]       = { "anisotropic", "clearcoat", "clearcoatgloss", "eta", "metallic", "sheen", "roughness", "sheen", "sheentint", "spectrans", "speculartint", nullptr };
-  static const char* kFloatParams_FourierMaterial[]      = { nullptr };
-  static const char* kFloatParams_GlassMaterial[]        = { "eta", "uroughness", "vroughness", nullptr };
-  static const char* kFloatParams_HairMaterial[]         = { "eumelanin", "pheomelanin", "eta", "beta_m", "beta_n", "alpha", nullptr };
-  static const char* kFloatParams_KdSubsurfaceMaterial[] = { "eta", "uroughness", "vroughness", nullptr };
-  static const char* kFloatParams_MatteMaterial[]        = { "sigma", nullptr };
-  static const char* kFloatParams_MetalMaterial[]        = { "uroughness", "vroughness", nullptr };
-  static const char* kFloatParams_MirrorMaterial[]       = { nullptr };
-  static const char* kFloatParams_MixMaterial[]          = { nullptr };
-  static const char* kFloatParams_NoneMaterial[]         = { nullptr };
-  static const char* kFloatParams_PlasticMaterial[]      = { "roughness", nullptr };
-  static const char* kFloatParams_SubstrateMaterial[]    = { "uroughness", "vroughness", nullptr };
-  static const char* kFloatParams_SubsurfaceMaterial[]   = { "scale", "eta", "uroughness", "vroughness", nullptr };
-  static const char* kFloatParams_TranslucentMaterial[]  = { "roughness", nullptr };
-  static const char* kFloatParams_UberMaterial[]         = { "eta", "uroughness", "vroughness", nullptr };
-
-  static const char** kFloatParamsByMaterial[] = {
-    kFloatParams_DisneyMaterial,
-    kFloatParams_FourierMaterial,
-    kFloatParams_GlassMaterial,
-    kFloatParams_HairMaterial,
-    kFloatParams_KdSubsurfaceMaterial,
-    kFloatParams_MatteMaterial,
-    kFloatParams_MetalMaterial,
-    kFloatParams_MirrorMaterial,
-    kFloatParams_MixMaterial,
-    kFloatParams_NoneMaterial,
-    kFloatParams_PlasticMaterial,
-    kFloatParams_SubstrateMaterial,
-    kFloatParams_SubsurfaceMaterial,
-    kFloatParams_TranslucentMaterial,
-    kFloatParams_UberMaterial,
-  };
-
-
   bool Parser::has_material_overrides(uint32_t matIdx) const
   {
     if (matIdx == kInvalidIndex) {
@@ -7453,6 +7704,66 @@ namespace minipbrt {
     size_t start = m_temp.size();
     m_temp.resize(start + numBytes);
     std::memcpy(m_temp.data() + start, src, numBytes);
+  }
+
+
+  //
+  // Loader public methods
+  //
+
+  Loader::Loader() :
+    m_scene(nullptr),
+    m_parser(new Parser())
+  {
+  }
+
+
+  Loader::~Loader()
+  {
+    delete m_scene;
+    delete m_parser;
+  }
+
+
+  void Loader::set_buffer_capacity(size_t n)
+  {
+    m_parser->tokenizer().set_buffer_capacity(n);
+  }
+
+
+  void Loader::set_max_include_depth(uint32_t n)
+  {
+    m_parser->tokenizer().set_max_include_depth(n);
+  }
+
+
+  bool Loader::load(const char* filename)
+  {
+    if (!m_parser->parse(filename)) {
+      return false;
+    }
+    m_scene = m_parser->take_scene();
+    return true;
+  }
+
+
+  Scene* Loader::take_scene()
+  {
+    Scene* scene = m_scene;
+    m_scene = nullptr;
+    return scene;
+  }
+
+
+  Scene* Loader::borrow_scene()
+  {
+    return m_scene;
+  }
+
+
+  const Error* Loader::error() const
+  {
+    return m_parser->get_error();
   }
 
 } // namespace minipbrt

@@ -37,40 +37,100 @@ The CMake file in this directory is just for building the examples.
 Loading a file
 --------------
 
-Simply create a `minipbrt::Parser` object and call it's `parse()` method,
+Simply create a `minipbrt::Loader` object and call it's `load()` method,
 passing in the name of the file you want to parse. The method will return
 `true` if parsing succeeded or `false` if there was an error. 
 
-If parsing succeeded, call `parser.take_scene()` or `parser.borrow_scene()` to
+If parsing succeeded, call `loader.take_scene()` or `loader.borrow_scene()` to
 get a pointer to a `minipbrt::Scene` object describing the scene. The
 `take_scene` method transfers ownership of the scene object to the caller,
 meaning you must delete it yourself when you're finished with it; whereas
 `borrow_scene` lets you use the scene object temporarily, but it will be
-deleted automatically by the parser's destructor.
+deleted automatically by the loader's destructor.
 
-If parsing failed, call `parser.get_error()` to get a `minipbrt::Error` object
+If loading failed, call `loader.error()` to get a `minipbrt::Error` object
 describing what went wrong. The object includes the filename, line number and
 column number where the error occurred. This will be exact for syntactic
 errors, but may give the location of the token immediately *after* the error
-for semantic errors. The error object remains owned by the parser, so you
+for semantic errors. The error object remains owned by the loader, so you
 never have to delete it yourself.
 
 Example code:
-```
-minipbrt::Parser parser;
-if (parser.parse(filename)) {
-	minipbrt::Scene* scene = parser.take_scene();
+```cpp
+minipbrt::Loader loader;
+if (loader.load(filename)) {
+	minipbrt::Scene* scene = loader.take_scene();
 	// ... process the scene, then delete it ...
 	delete scene;
 }
 else {
   // If parsing failed, the parser will have an error object.
-  const minipbrt::Error* err = parser.get_error();
+  const minipbrt::Error* err = loader.error();
   fprintf(stderr, "[%s, line %lld, column %lld] %s\n",
       err->filename(), err->line(), err->column(), err->message());
   // Don't delete err, it's still owned by the parser.
 }
 ```
+
+
+Loading triangle meshes from external PLY files, single threaded
+----------------------------------------------------------------
+
+If you're happy with loading all the PLY files on a single thread, it's a
+single method call:
+
+```cpp
+  // Assuming we've already loaded the scene successfully
+  minipbrt::Scene* scene = /* ... */;
+  scene->load_all_ply_meshes();
+```
+
+The `load_all_ply_meshes()` method will replace all PLYMesh shapes in the
+scenes shape list with corresponding TriangleMesh shapes. This function is
+provided as a convenience, but note that it's single-threaded. Some scenes 
+reference a lot of PLY files and loading them in parallel can give a big speed
+up. See below for more info on that.
+
+
+Loading triangle meshes from external PLY files, multi-threaded
+---------------------------------------------------------------
+
+minipbrt does not provide any built-in multithreaded code, however the 
+`to_triangle_mesh` method can be safely called from multiple threads so it's 
+easy to integrate into your own threading system. 
+
+Here's a simple example using `std::thread`:
+
+```cpp
+  // Assuming we've already loaded the scene successfully
+  minipbrt::Scene* scene = /* ... */;
+
+  std::atomic_uint nextShape(0);
+  const uint32_t endShape = uint32_t(scene->shapes.size());
+  const uint32_t numThreads = std::thread::hardware_concurrency();
+  std::vector<std::thread> loaderThreads;
+  loaderThreads.reserve(numThreads);
+  for (uint32_t i = 0; i < numThreads; i++) {
+    loaderThreads.push_back(std::thread([scene, &nextMesh, endMesh]() {
+      uint32_t shape = nextShape++;
+      while (shape < endShape) {
+        if (scene->shapes[shape]->type() == minipbrt::ShapeType::PLYMesh) {
+          scene->to_triangle_mesh(shape);
+        }
+        shape = nextShape++;
+      }
+    }));
+  }
+  for (std::thread& th : loaderThreads) {
+    th.join();
+  }
+```
+
+Note that this example doesn't ensure that all PLY files loaded successfully -
+some may have failed to load. A more robust implementation should check for
+this, either by checking the return value of `scene->to_triangle_mesh` or by
+scanning `scene-shapes` a second time to see whether it still contains any
+PLYMesh shapes.
 
 
 Implementation notes

@@ -169,6 +169,10 @@ namespace minipbrt {
     void clear(T ival)  { val &= ~(1u << static_cast<uint32_t>(ival)); }
     void toggle(T ival) { val ^= (1u << static_cast<uint32_t>(ival)); }
 
+    void setAll()    { val = 0xFFFFFFFFu; }
+    void clearAll()  { val = 0u;}
+    void toggleAll() { val = ~val; }
+
     bool contains(T ival) const { return (val & (1u << static_cast<uint32_t>(ival))) != 0u; }
   };
 
@@ -1480,6 +1484,8 @@ namespace minipbrt {
     /// couldn't convert.
     bool shapes_to_triangle_mesh(Bits<ShapeType> typesToConvert);
 
+    bool all_to_triangle_mesh();
+
     /// Shorthand for `shapes_to_triangle_mesh(ShapeType::PLYMesh)`.
     bool load_all_ply_meshes();
   };
@@ -1494,7 +1500,7 @@ namespace minipbrt {
   class Error {
   public:
     // Error takes a copy of `theFilename`, but takes ownership of `theMessage`.
-    Error(const char* theFilename, int64_t theOffset, const char* theMessage, const char* bufPos, const char* bufEnd);
+    Error(const char* theFilename, int64_t theOffset, const char* theMessage);
     ~Error();
 
     const char* filename() const;

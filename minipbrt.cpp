@@ -3948,6 +3948,15 @@ namespace minipbrt {
   }
 
 
+  bool Scene::all_to_triangle_mesh()
+  {
+    Bits<ShapeType> types;
+    types.setAll();
+    types.clear(ShapeType::TriangleMesh);
+    return shapes_to_triangle_mesh(types);
+  }
+
+
   bool Scene::load_all_ply_meshes()
   {
     return shapes_to_triangle_mesh(ShapeType::PLYMesh);
@@ -3958,7 +3967,7 @@ namespace minipbrt {
   // Error public methods
   //
 
-  Error::Error(const char* theFilename, int64_t theOffset, const char* theMessage, const char* bufPos, const char* bufEnd)
+  Error::Error(const char* theFilename, int64_t theOffset, const char* theMessage)
   {
     m_filename = copy_string(theFilename);
     m_offset = theOffset;
@@ -4599,7 +4608,7 @@ namespace minipbrt {
     vsnprintf(errorMessage, size_t(len + 1), fmt, args);
     va_end(args);
 
-    m_error = new Error(fdata->filename, errorOffset, errorMessage, m_pos, m_bufEnd);
+    m_error = new Error(fdata->filename, errorOffset, errorMessage);
 
     int64_t errorLine, errorCol;
     cursor_location(&errorLine, &errorCol);

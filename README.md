@@ -11,17 +11,20 @@ Features
 --------
 
 - *Small*: just a single .h and .cpp file which you can copy into your project.
-- *Fast*: between 4 and 30 times faster than pbrt-parser on most scenes.
-- *Complete*: supports the full PBRTv3 file format, not just a subset; and can
-  load mesh data from any valid PLY file (ascii, little endian or big endian).
-- Provides built-in functions for loading triangle mesh data from PLY files:
-  - One function which loads all .ply files
-  - One function to load a single .ply file, which you can safely call from 
-    multiple threads concurrently.
+- *Fast*: parses Disney's enormous Moana island scene (36 GB of data across
+  491 files) in just 138 seconds. Many sample scenes take just a few tens of
+  milliseconds.
+- *Complete*: supports the full PBRTv3 file format and can load triangle mesh 
+  data from any valid PLY file (ascii, little endian or big endian).
+- *Thread-friendly*: designed so that PLY files can be loaded, or shapes
+   turned into triangle meshes, on multiple threads; and can be integrated 
+   easily with your own threading system of choice.
 - Converts spectrum values to RGB at load time using the CIE XYZ response 
   curves.
-- Provides detailed error info if a file fails to parse, including the line
-  and column number where it failed.
+- Utility functions for converting shapes into triangle meshes.
+- PLY loading automatically triangulates polygons with more than 3 vertices.
+- Gives useful error info if a file fails to parse, including the line and 
+  column number where it failed.
 - MIT Licensed.
 
 
@@ -161,25 +164,11 @@ Implementation notes
 Performance
 -----------
 
-See the [pbrt-parsing-perf](https://github.com/vilya/pbrt-parsing-perf)
-project for much more detailed performance info. These results are just a
-quick summary to give you an idea of the performance.
+See PERFORMANCE.md for parsing times on a wide range of input files. 
 
-
-| Scene                                                                                     | Parse time (secs) |
-| :---------------------------------------------------------------------------------------- | ----------------: |
-| Disney's [Moana island scene](https://www.technology.disneyanimation.com/islandscene)     | 177.581           |
-| [Landscape scene](https://www.pbrt.org/scenes-v3.html) from the PBRT v3 scenes collection | 1.651             |
-
-
-The times above are from a Windows 10 laptop with:
-* Intel Core i7-6700HQ CPU, 2.6 GHz
-* 16 GB Dual-channel DDR4 RAM
-* Samsung MZVPV512 SSD, theoretical peak read speed of 1165 MB/s
-
-Note that the laptop had to use swap space while parsing the Moana island
-scene. Parsing completes considerably faster when you have enough free memory
-to avoid swapping.
+The [pbrt-parsing-perf](https://github.com/vilya/pbrt-parsing-perf) project
+has a detailed performance comparison against pbrt-parser, the only other
+open-source PBRT parsing library for C++ that I know of.
 
 
 Feedback, suggestions and bug reports

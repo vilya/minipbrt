@@ -995,66 +995,43 @@ namespace minipbrt {
   // true, otherwise return false and set buf to the empty string.
   static bool resolve_file(const char* filename, const char* current, char* buf, size_t bufSize)
   {
-    assert(filename != nullptr && filename[0] != '\0');
-    assert(buf != nullptr);
-    assert(bufSize > strlen(filename));
-
-    bool absolute = (current == nullptr) || (current[0] == '\0');
-    if (filename[0] == '/' || filename[0] == '\\') {
-      absolute = true;
-    }
-    else if (filename[1] == ':' && tolower(filename[0]) >= 'a' && tolower(filename[0]) <= 'z') {
-      absolute = true;
+    if (filename == nullptr || filename[0] == '\0') {
+      return false;
     }
 
-    buf[0] = '\0'; // Make sure `buf` will be an empty string if the resolve fails.
+    bool isAbsolute = (filename[0] == '/' || filename[0] == '\\');
+    if (!isAbsolute) {
+      if (is_letter(filename[0]) && filename[1] == ':') {
+        isAbsolute = true;
+      }
+    }
 
-    if (absolute) {
-      // If it's an absolute filename, just copy it over to `buf` and return.
-      for (size_t i = 0, endI = bufSize; i < endI; i++) {
-        if (filename[i] == '\0') {
-          std::memcpy(buf, filename, sizeof(char) * (i + 1));
-          return true;
+    size_t currentLen = 0;
+    if (!isAbsolute) {
+      for (size_t i = 0; current[i] != '\0'; i++) {
+        if (current[i] == '/' || current[i] == '\\') {
+          currentLen = i + 1;
         }
       }
-      // If we got here then `filename` was longer than the provided buffer, so
-      // the resolve fails.
+    }
+
+    size_t filenameLen = 0;
+    while (filename[filenameLen] != '\0') {
+      ++filenameLen;
+    }
+    ++filenameLen; // Include the null terminator.
+
+    size_t totalLen = currentLen + filenameLen;
+    if (totalLen > bufSize) {
       return false;
     }
 
-    char sepChar = '/';
-    size_t lastSep = 0;
-    // Find the index of the last path separator in `current`.
-    for (size_t i = 0; current[i] != '\0'; i++) {
-      if (current[i] == '\\' || current[i] == '/') {
-        lastSep = i;
-        sepChar = current[i];
-      }
+    if (currentLen > 0) {
+      memcpy(buf, current, sizeof(char) * currentLen);
+      buf += currentLen;
     }
-    if (lastSep >= bufSize) {
-      // If the dirname portion of `current` is larger than bufSize, the
-      // resolve fails.
-      return false;
-    }
-
-    // Copy the dirname portion of `current` to buf, including the final
-    // separator (if any).
-
-    // Make sure that the resolved filename will fit into `buf`.
-    size_t maxFilenameLen = bufSize - lastSep - 2;
-    for (size_t i = 0; i < maxFilenameLen; i++) {
-      if (filename[i] == '\0') {
-        // Copy the dirname portion of `current` into `buf`.
-        std::memcpy(buf, current, sizeof(char) * lastSep);
-        buf[lastSep] = sepChar;
-        // Append `filename` to `buf`, including its terminating null char.
-        std::memcpy(buf + lastSep + 1, filename, sizeof(char) * (i + 1));
-        return true;
-      }
-    }
-
-    // Resolved filename was karger than `bufSize`, so the resolve fails.
-    return false;
+    memcpy(buf, filename, sizeof(char) * filenameLen);
+    return true;
   }
 
 

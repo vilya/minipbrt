@@ -39,14 +39,6 @@ Callback-based parsing interface
   Parser should only invoke callbacks. SceneBuilder should be the default 
   callback handler.
 
-Improved error handling:
-* Currently we stop at the first error & "error" is the only level.
-* Add support for multiple errors.
-* Add support for warnings.
-* Make line number calculation more efficient when we have to do it multiple times:
-  * Currently we count newlines from the start of the file every time
-  * Instead, keep track of the last line number we calculated & its file offset. Count from there instead of the start of the file.
-
 
 Performance
 -----------
@@ -61,6 +53,8 @@ Reduce memory usage for the in-memory scene representation:
 - Try using a packed (compressed?) representation, with decoding done in
   accessor methods?
 - Use a disk cache.
+
+Reduce overall number of memory allocations.
 
 Improve IO performance:
 - Use a background thread and/or async I/O calls to load the next buffer while

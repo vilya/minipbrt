@@ -27,7 +27,7 @@ Results for all scenes in pbrt-v3-scenes
 Source: https://www.pbrt.org/scenes-v3.html
 
 | Scene                                            | Parsed OK? | Time       |
-| :----------------------------------------------: | :--------: | ---------: |
+| :----------------------------------------------- | :--------: | ---------: |
 | barcelona-pavilion/pavilion-day.pbrt             | passed     | 0.617 secs |
 | barcelona-pavilion/pavilion-night.pbrt           | passed     | 0.608 secs |
 | bathroom/bathroom.pbrt                           | passed     | 0.055 secs |
@@ -184,9 +184,9 @@ Source: https://www.pbrt.org/scenes-v3.html
 | white-room/whiteroom-night.pbrt                  | passed     | 0.106 secs |
 | yeahright/yeahright.pbrt                         | passed     | 0.034 secs |
 
-132.442 secs total
-155 passed
-0 failed
+* 132.442 secs total
+* 155 passed
+* 0 failed
 
 
 Results for all scenes in Benedikt Bitterli's collection
@@ -195,7 +195,7 @@ Results for all scenes in Benedikt Bitterli's collection
 Source: https://benedikt-bitterli.me/resources/
 
 | Scene                           | Parsed OK? | Time       |
-| :-----------------------------: | :--------: | ---------: |
+| :------------------------------ | :--------: | ---------: |
 | ./bathroom/scene.pbrt           | passed     | 4.837 secs |
 | ./bathroom2/scene.pbrt          | passed     | 0.731 secs |
 | ./bedroom/scene.pbrt            | passed     | 0.994 secs |
@@ -229,9 +229,9 @@ Source: https://benedikt-bitterli.me/resources/
 | ./volumetric-caustic/scene.pbrt | passed     | 0.005 secs |
 | ./water-caustic/scene.pbrt      | passed     | 0.066 secs |
 
-47.744 secs total
-32 passed
-0 failed
+* 47.744 secs total
+* 32 passed
+* 0 failed
 
 
 Results for Disney's Moana island scene
@@ -240,10 +240,10 @@ Results for Disney's Moana island scene
 Source: https://www.technology.disneyanimation.com/islandscene
 
 | Scene                           | Parsed OK? | Time         |
-| :-----------------------------: | :--------: | -----------: |
+| :------------------------------ | :--------: | -----------: |
 | ./pbrt/island.pbrt              | passed     | 137.763 secs |
 | ./pbrt/islandX.pbrt             | passed     | 140.141 secs |
 
-322.364 secs total
-2 passed
-0 failed
+* 322.364 secs total
+* 2 passed
+* 0 failed

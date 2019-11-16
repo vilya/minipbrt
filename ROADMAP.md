@@ -16,7 +16,12 @@ meshes.
 v2.0
 ----
 
-Goal: make the in-memory Scene representation optional.
+Goal: make the in-memory scene representation optional.
+
+Most programs will - I believe - have their own scene representation and will 
+only be using ours as an intermediate step to populating theirs from. If we can
+provide a way to cut out that intermediate step it will save a lot of time and 
+memory.
 
 Refactor the API to separate parsing from scene building:
 * Parser invokes callbacks on a user-provided object. 

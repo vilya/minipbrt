@@ -74,7 +74,6 @@ SOFTWARE.
 /// 
 /// * Likewise, we provide helper functions for triangulating shapes but it's
 ///   up to you to call them.
-///   (These aren't implemented yet either - see TODO.md)
 /// 
 /// * Most material properties can be either a texture or a value. These
 ///   properties are represented as structs with type `ColorTex` or `FloatTex`. In

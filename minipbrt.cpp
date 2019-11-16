@@ -263,6 +263,7 @@ namespace minipbrt {
   static constexpr uint32_t kMaxAttributeStackEntry = 127;
   static constexpr size_t kMaxReservedTempSpace = 4 * 1024 * 1024;
 
+
   //
   // CIE curves, for converting spectra to RGB. Copied from the PBRT source code.
   //
@@ -684,10 +685,7 @@ namespace minipbrt {
     float x, y;
   };
 
-  static inline Vec2 operator + (Vec2 lhs, Vec2 rhs) { return Vec2{ lhs.x + rhs.x, lhs.y + rhs.y }; }
   static inline Vec2 operator - (Vec2 lhs, Vec2 rhs) { return Vec2{ lhs.x - rhs.x, lhs.y - rhs.y }; }
-  static inline Vec2 operator * (Vec2 lhs, Vec2 rhs) { return Vec2{ lhs.x * rhs.x, lhs.y * rhs.y }; }
-  static inline Vec2 operator / (Vec2 lhs, Vec2 rhs) { return Vec2{ lhs.x / rhs.x, lhs.y / rhs.y }; }
 
   static inline float dot(Vec2 lhs, Vec2 rhs) { return lhs.x * rhs.x + lhs.y * rhs.y; }
   static inline float length(Vec2 v) { return std::sqrt(dot(v, v)); }
@@ -702,10 +700,7 @@ namespace minipbrt {
     float x, y, z;
   };
 
-  static inline Vec3 operator + (Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z }; }
   static inline Vec3 operator - (Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z }; }
-  static inline Vec3 operator * (Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z }; }
-  static inline Vec3 operator / (Vec3 lhs, Vec3 rhs) { return Vec3{ lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z }; }
 
   static inline float dot(Vec3 lhs, Vec3 rhs) { return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z; }
   static inline float length(Vec3 v) { return std::sqrt(dot(v, v)); }
@@ -720,13 +715,15 @@ namespace minipbrt {
   struct Mat4 {
     float rows[4][4];
 
-    void identity();                              //!< Set this to the identity matrix.
-    void translate(const float v[3]);             //!< Multiply this matrix by a translation matrix
-    void scale(const float v[3]);                 //!< Multiply this matrix by a scale matrix.
-    void rotate(const float angleAxis[4]);        //!< Multiply this matrix by a rotation matrix.
-    void lookAt(const float params[9]);           //!< Multiply this matrix by a lookAt matrix.
-    void transform(const float params[16]);       //!< Set this to the given matrix.
-    void concatTransform(const float params[16]); //!< Multiply this matrix by the given matrix.
+    void identity();                                  //!< Set this to the identity matrix.
+    void translate(Vec3 v);                           //!< Multiply this matrix by a translation matrix
+    void scale(Vec3 v);                               //!< Multiply this matrix by a scale matrix.
+    void rotate(const float angleRadians, Vec3 axis); //!< Multiply this matrix by a rotation matrix.
+    void lookAt(Vec3 pos, Vec3 target, Vec3 up);      //!< Multiply this matrix by a lookAt matrix.
+    void transform(const Mat4& m);                    //!< Set this to the given matrix.
+    void concatTransform(const Mat4& m);              //!< Multiply this matrix by the given matrix.
+
+    float det2x2(int r0, int r1, int c0, int c1) const;
   };
 
   static Mat4 inverse(const Mat4& m);
@@ -749,18 +746,18 @@ namespace minipbrt {
     bool push();
     bool pop();
 
-    void clear();
+    void clear();                                 //!< Pop all transforms off the stack and reset the remaining transform to identity.
 
-    void identity();
-    void translate(const float v[3]);
-    void scale(const float v[3]);                 //!< Multiply this matrix by a scale matrix.
-    void rotate(const float angleAxis[4]);        //!< Multiply this matrix by a rotation matrix.
-    void lookAt(const float params[9]);           //!< Multiply this matrix by a lookAt matrix.
-    void transform(const float params[16]);       //!< Set this to the given matrix.
-    void concatTransform(const float params[16]); //!< Multiply this matrix by the given matrix.
+    void identity();                              //!< Set the current transform to the identity matrix.
+    void translate(Vec3 t);                       //!< Multiply the current transform by a translation matrix.
+    void scale(Vec3 s);                           //!< Multiply the current transform by a scale matrix.
+    void rotate(float angleRadians, Vec3 axis);   //!< Multiply the current transform by a rotation matrix.
+    void lookAt(Vec3 pos, Vec3 target, Vec3 up);  //!< Multiply the current transform by a lookAt matrix.
+    void transform(const Mat4& m);                //!< Set the current transform to an arbitrary matrix.
+    void concatTransform(const Mat4& m);          //!< Multiply the current transform by an arbitrary matrix.
 
-    void coordinateSystem(const char* name);  //!< Save the current transforms with the specified name.
-    bool coordSysTransform(const char* name); //!< Restore the transforms with the specified name.
+    void coordinateSystem(const char* name);      //!< Save the current transforms with the specified name.
+    bool coordSysTransform(const char* name);     //!< Restore the transforms with the specified name.
   };
 
 
@@ -996,7 +993,7 @@ namespace minipbrt {
   // The resolved path is stored in `buf`. The boolean return value indicates
   // whether buf was large enough to hold it. If buf was large enough we return
   // true, otherwise return false and set buf to the empty string.
-  bool resolve_file(const char* filename, const char* current, char* buf, size_t bufSize)
+  static bool resolve_file(const char* filename, const char* current, char* buf, size_t bufSize)
   {
     assert(filename != nullptr && filename[0] != '\0');
     assert(buf != nullptr);
@@ -1287,29 +1284,6 @@ namespace minipbrt {
   }
 
 
-  static inline float dot(float a[3], float b[3])
-  {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  }
-
-
-  static inline void cross(float a[3], float b[3], float out[3])
-  {
-    out[0] = a[1] * b[2] - a[2] * b[1];
-    out[1] = a[2] * b[0] - a[0] * b[2];
-    out[2] = a[0] * b[1] - a[1] * b[0];
-  }
-
-
-  static inline void normalize_in_place(float v[3])
-  {
-    float len = std::sqrt(dot(v, v));
-    v[0] /= len;
-    v[1] /= len;
-    v[2] /= len;
-  }
-
-
   static void xyz_to_rgb(const float xyz[3], float rgb[3])
   {
     rgb[0] =  3.240479f * xyz[0] - 1.537150f * xyz[1] - 0.498535f * xyz[2];
@@ -1335,22 +1309,12 @@ namespace minipbrt {
   }
 
 
-  static bool is_sorted(const float arr[], uint32_t n)
-  {
-    for (uint32_t i = 1; i < n; i++) {
-      if (arr[i] < arr[i - 1]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-
   static float average_over_curve(const float x[], const float y[], uint32_t n, float x0, float x1)
   {
-    assert(x0 <= x1);
-    assert(is_sorted(x, n));
+    // NOTE: we assume the x values are already sorted in increasing order and
+    // that there are no duplicate values.
 
+    assert(x0 <= x1);
     if (x1 <= x[0]) {
       return y[0];
     }
@@ -1559,121 +1523,52 @@ namespace minipbrt {
   }
 
 
-  void Mat4::translate(const float v[3])
+  void Mat4::translate(Vec3 v)
   {
-    /*
-    this = 
-      a b c d
-      e f g h
-      i j k l
-      m n o p
-
-    T =
-      1 0 0 x
-      0 1 0 y
-      0 0 1 z
-      0 0 0 1
-
-    this * T =
-      a b c (ax + by + cz + d)
-      e f g (ex + fy + gz + h)
-      i j k (ix + jy + kz + l)
-      m n o (mx + ny + oz + p)
-    */
-
-    rows[0][3] += rows[0][0] * v[0] + rows[0][1] * v[1] + rows[0][2] * v[2];
-    rows[1][3] += rows[1][0] * v[0] + rows[1][1] * v[1] + rows[1][2] * v[2];
-    rows[2][3] += rows[2][0] * v[0] + rows[2][1] * v[1] + rows[2][2] * v[2];
-    rows[3][3] += rows[3][0] * v[0] + rows[3][1] * v[1] + rows[3][2] * v[2];
+    // See NOTES.md for the working out.
+    rows[0][3] += rows[0][0] * v.x + rows[0][1] * v.y + rows[0][2] * v.z;
+    rows[1][3] += rows[1][0] * v.x + rows[1][1] * v.y + rows[1][2] * v.z;
+    rows[2][3] += rows[2][0] * v.x + rows[2][1] * v.y + rows[2][2] * v.z;
+    rows[3][3] += rows[3][0] * v.x + rows[3][1] * v.y + rows[3][2] * v.z;
   }
 
 
-  void Mat4::scale(const float v[3])
+  void Mat4::scale(Vec3 v)
   {
-    /*
-    this = 
-      a b c d
-      e f g h
-      i j k l
-      m n o p
+    // See NOTES.md for the working out.
+    rows[0][0] *= v.x;
+    rows[0][1] *= v.y;
+    rows[0][2] *= v.z;
 
-    S =
-      x 0 0 0
-      0 y 0 0
-      0 0 z 0
-      0 0 0 1
+    rows[1][0] *= v.x;
+    rows[1][1] *= v.y;
+    rows[1][2] *= v.z;
 
-    this * S =
-      ax by cz d
-      ex fy gz h
-      ix jy kz l
-      mx ny oz p
-    */
-    rows[0][0] *= v[0];
-    rows[0][1] *= v[1];
-    rows[0][2] *= v[2];
+    rows[2][0] *= v.x;
+    rows[2][1] *= v.y;
+    rows[2][2] *= v.z;
 
-    rows[1][0] *= v[0];
-    rows[1][1] *= v[1];
-    rows[1][2] *= v[2];
-
-    rows[2][0] *= v[0];
-    rows[2][1] *= v[1];
-    rows[2][2] *= v[2];
-
-    rows[3][0] *= v[0];
-    rows[3][1] *= v[1];
-    rows[3][2] *= v[2];
+    rows[3][0] *= v.x;
+    rows[3][1] *= v.y;
+    rows[3][2] *= v.z;
   }
 
 
-  void Mat4::rotate(const float angleAxis[4])
+  void Mat4::rotate(const float angleRadians, Vec3 axis)
   {
-    float angleRadians = degrees_to_radians(angleAxis[0]);
+    // See NOTES.md for the working out.
     float c = std::cos(angleRadians);
     float s = std::sin(angleRadians);
 
-    float u[3] = { angleAxis[1], angleAxis[2], angleAxis[3] };
-    normalize_in_place(u);
+    Vec3 u = normalize(axis);
 
     float a[4][4];
     std::memcpy(a, rows, sizeof(a));
 
-    /*
-    this = 
-      a b c d
-      e f g h
-      i j k l
-      m n o p
-
-    R =
-      ra rb rc 0
-      rd re rf 0
-      rg rh ri 0
-      0  0  0  1
-
-    this * R =
-      (a.ra + b.rd + c.rg)  (a.rb + b.re + c.rh)  (a.rc + b.rf + c.ri)  d
-      (e.ra + f.rd + g.rg)  (e.rb + f.re + g.rh)  (e.rc + f.rf + g.ri)  h
-      (i.ra + j.rd + k.rg)  (i.rb + j.re + k.rh)  (i.rc + j.rf + k.ri)  l
-      (m.ra + n.rd + o.rg)  (m.rb + n.re + o.rh)  (m.rc + n.rf + o.ri)  p
-
-    ra = ux * ux * (1 - cosTheta) + cosTheta
-    rb = ux * uy * (1 - cosTheta) - uz * sinTheta
-    rc = ux * uz * (1 - cosTheta) + uy * sinTheta
-
-    rd = uy * ux * (1 - cosTheta) + uz * sinTheta
-    re = uy * uy * (1 - cosTheta) + cosTheta
-    rf = uy * uz * (1 - cosTheta) - ux * sinTheta
-
-    rg = uz * ux * (1 - cosTheta) - uy * sinTheta
-    rh = uz * uy * (1 - cosTheta) + ux * sinTheta
-    ri = uz * uz * (1 - cosTheta) + cosTheta 
-    */
     float b[3][3] = {
-      { u[0] * u[0] * (1.0f - c) + c,         u[0] * u[1] * (1.0f - c) - u[2] * s,  u[0] * u[2] * (1.0f - c) + u[1] * s },
-      { u[1] * u[0] * (1.0f - c) + u[2] * s,  u[1] * u[1] * (1.0f - c) + c,         u[1] * u[2] * (1.0f - c) - u[0] * s },
-      { u[2] * u[0] * (1.0f - c) - u[1] * s,  u[2] * u[1] * (1.0f - c) + u[0] * s,  u[2] * u[2] * (1.0f - c) + c        },
+      { u.x * u.x * (1.0f - c) + c,        u.x * u.y * (1.0f - c) - u.z * s,  u.x * u.z * (1.0f - c) + u.y * s },
+      { u.y * u.x * (1.0f - c) + u.z * s,  u.y * u.y * (1.0f - c) + c,        u.y * u.z * (1.0f - c) - u.x * s },
+      { u.z * u.x * (1.0f - c) - u.y * s,  u.z * u.y * (1.0f - c) + u.x * s,  u.z * u.z * (1.0f - c) + c       },
     };
 
     rows[0][0] = a[0][0] * b[0][0] + a[0][1] * b[1][0] + a[0][2] * b[2][0];
@@ -1694,17 +1589,14 @@ namespace minipbrt {
   }
 
 
-  void Mat4::lookAt(const float params[9])
+  void Mat4::lookAt(Vec3 pos, Vec3 target, Vec3 up)
   {
     // This implementation could be made faster, but lookAt will usually only
     // be called no more than once per input file so raw speed isn't as
     // important as keeping the code clear in this case.
 
-    Vec3 pos{ params[0], params[1], params[2] };
-    Vec3 dir = normalize(Vec3{ params[3], params[4], params[5] } - pos);
-    Vec3 up  = normalize(Vec3{ params[6], params[7], params[8] });
-
-    Vec3 xAxis = normalize(cross(up, dir));
+    Vec3 dir = normalize(target - pos);
+    Vec3 xAxis = normalize(cross(normalize(up), dir));
     Vec3 yAxis = normalize(cross(dir, xAxis));
 
     Mat4 m;
@@ -1730,6 +1622,12 @@ namespace minipbrt {
 
     m = inverse(m);
 
+    concatTransform(m);
+  }
+
+
+  void Mat4::concatTransform(const Mat4& m)
+  {
     float a[4][4];
     std::memcpy(a, rows, sizeof(a));
 
@@ -1741,93 +1639,35 @@ namespace minipbrt {
   }
 
 
-  void Mat4::transform(const float params[16])
-  {
-    // Somewhat bizarrely, the ConcatTransform parameters are in column-major
-    // order even though PBRT's Matrix4x4 class uses row-major order.
-    rows[0][0] = params[0];
-    rows[1][0] = params[1];
-    rows[2][0] = params[2];
-    rows[3][0] = params[3];
-
-    rows[0][1] = params[4];
-    rows[1][1] = params[5];
-    rows[2][1] = params[6];
-    rows[3][1] = params[7];
-
-    rows[0][2] = params[ 8];
-    rows[1][2] = params[ 9];
-    rows[2][2] = params[10];
-    rows[3][2] = params[11];
-
-    rows[0][3] = params[12];
-    rows[1][3] = params[13];
-    rows[2][3] = params[14];
-    rows[3][3] = params[15];
-  }
-
-
-  void Mat4::concatTransform(const float params[16])
-  {
-    float a[4][4];
-    std::memcpy(a, rows, sizeof(a));
-
-    // Somewhat bizarrely, the ConcatTransform parameters are in column-major
-    // order even though PBRT's Matrix4x4 class uses row-major order.
-    float b[4][4];
-    std::memcpy(b, params, sizeof(b));
-
-    rows[0][0] = a[0][0] * b[0][0] + a[0][1] * b[0][1] + a[0][2] * b[0][2] + a[0][3] * b[0][3];
-    rows[0][1] = a[0][0] * b[1][0] + a[0][1] * b[1][1] + a[0][2] * b[1][2] + a[0][3] * b[1][3];
-    rows[0][2] = a[0][0] * b[2][0] + a[0][1] * b[2][1] + a[0][2] * b[2][2] + a[0][3] * b[2][3];
-    rows[0][3] = a[0][0] * b[3][0] + a[0][1] * b[3][1] + a[0][2] * b[3][2] + a[0][3] * b[3][3];
-
-    rows[1][0] = a[1][0] * b[0][0] + a[1][1] * b[0][1] + a[1][2] * b[0][2] + a[1][3] * b[0][3];
-    rows[1][1] = a[1][0] * b[1][0] + a[1][1] * b[1][1] + a[1][2] * b[1][2] + a[1][3] * b[1][3];
-    rows[1][2] = a[1][0] * b[2][0] + a[1][1] * b[2][1] + a[1][2] * b[2][2] + a[1][3] * b[2][3];
-    rows[1][3] = a[1][0] * b[3][0] + a[1][1] * b[3][1] + a[1][2] * b[3][2] + a[1][3] * b[3][3];
-
-    rows[2][0] = a[2][0] * b[0][0] + a[2][1] * b[0][1] + a[2][2] * b[0][2] + a[2][3] * b[0][3];
-    rows[2][1] = a[2][0] * b[1][0] + a[2][1] * b[1][1] + a[2][2] * b[1][2] + a[2][3] * b[1][3];
-    rows[2][2] = a[2][0] * b[2][0] + a[2][1] * b[2][1] + a[2][2] * b[2][2] + a[2][3] * b[2][3];
-    rows[2][3] = a[2][0] * b[3][0] + a[2][1] * b[3][1] + a[2][2] * b[3][2] + a[2][3] * b[3][3];
-
-    rows[3][0] = a[3][0] * b[0][0] + a[3][1] * b[0][1] + a[3][2] * b[0][2] + a[3][3] * b[0][3];
-    rows[3][1] = a[3][0] * b[1][0] + a[3][1] * b[1][1] + a[3][2] * b[1][2] + a[3][3] * b[1][3];
-    rows[3][2] = a[3][0] * b[2][0] + a[3][1] * b[2][1] + a[3][2] * b[2][2] + a[3][3] * b[2][3];
-    rows[3][3] = a[3][0] * b[3][0] + a[3][1] * b[3][1] + a[3][2] * b[3][2] + a[3][3] * b[3][3];
-  }
-
-
   // Determinant of the 2x2 matrix formed from rows r0,r1 and columns c0,c1 of
   // a 4x4 matrix. This is a helper method used for calculating the inverse of
   // the 4x4 matrix.
-  static inline float det2x2(const Mat4& m, int r0, int r1, int c0, int c1)
+  float Mat4::det2x2(int r0, int r1, int c0, int c1) const
   {
-    return m.rows[r0][c0] * m.rows[r1][c1] - m.rows[r0][c1] * m.rows[r1][c0];
+    return rows[r0][c0] * rows[r1][c1] - rows[r0][c1] * rows[r1][c0];
   }
 
 
-  Mat4 inverse(const Mat4& m)
+  static Mat4 inverse(const Mat4& m)
   {
-    float A = det2x2(m, 2, 3, 2, 3);
-    float B = det2x2(m, 2, 3, 1, 3);
-    float C = det2x2(m, 2, 3, 1, 2);
-    float D = det2x2(m, 2, 3, 0, 3);
-    float E = det2x2(m, 2, 3, 0, 2);
-    float F = det2x2(m, 2, 3, 0, 1);
-    float G = det2x2(m, 1, 3, 2, 3);
-    float H = det2x2(m, 1, 3, 1, 3);
-    float I = det2x2(m, 1, 3, 1, 2);
-    float J = det2x2(m, 1, 3, 0, 3);
-    float K = det2x2(m, 1, 3, 0, 2);
-    float L = det2x2(m, 1, 3, 0, 1);
-    float M = det2x2(m, 1, 2, 2, 3);
-    float N = det2x2(m, 1, 2, 1, 3);
-    float O = det2x2(m, 1, 2, 1, 2);
-    float P = det2x2(m, 1, 2, 0, 3);
-    float Q = det2x2(m, 1, 2, 0, 2);
-    float R = det2x2(m, 1, 2, 0, 1);
+    float A = m.det2x2(2, 3, 2, 3);
+    float B = m.det2x2(2, 3, 1, 3);
+    float C = m.det2x2(2, 3, 1, 2);
+    float D = m.det2x2(2, 3, 0, 3);
+    float E = m.det2x2(2, 3, 0, 2);
+    float F = m.det2x2(2, 3, 0, 1);
+    float G = m.det2x2(1, 3, 2, 3);
+    float H = m.det2x2(1, 3, 1, 3);
+    float I = m.det2x2(1, 3, 1, 2);
+    float J = m.det2x2(1, 3, 0, 3);
+    float K = m.det2x2(1, 3, 0, 2);
+    float L = m.det2x2(1, 3, 0, 1);
+    float M = m.det2x2(1, 2, 2, 3);
+    float N = m.det2x2(1, 2, 1, 3);
+    float O = m.det2x2(1, 2, 1, 2);
+    float P = m.det2x2(1, 2, 0, 3);
+    float Q = m.det2x2(1, 2, 0, 2);
+    float R = m.det2x2(1, 2, 0, 1);
 
     Mat4 inv;
 
@@ -1927,68 +1767,68 @@ namespace minipbrt {
   }
 
 
-  void TransformStack::translate(const float v[3])
+  void TransformStack::translate(Vec3 t)
   {
     if (active[0]) {
-      matrices[entry][0].translate(v);
+      matrices[entry][0].translate(t);
     }
     if (active[1]) {
-      matrices[entry][1].translate(v);
+      matrices[entry][1].translate(t);
     }
   }
 
 
-  void TransformStack::scale(const float v[3])
+  void TransformStack::scale(Vec3 s)
   {
     if (active[0]) {
-      matrices[entry][0].scale(v);
+      matrices[entry][0].scale(s);
     }
     if (active[1]) {
-      matrices[entry][1].scale(v);
+      matrices[entry][1].scale(s);
     }
   }
 
 
-  void TransformStack::rotate(const float v[4])
+  void TransformStack::rotate(float angleRadians, Vec3 axis)
   {
     if (active[0]) {
-      matrices[entry][0].rotate(v);
+      matrices[entry][0].rotate(angleRadians, axis);
     }
     if (active[1]) {
-      matrices[entry][1].rotate(v);
+      matrices[entry][1].rotate(angleRadians, axis);
     }
   }
 
 
-  void TransformStack::lookAt(const float v[9])
+  void TransformStack::lookAt(Vec3 pos, Vec3 target, Vec3 up)
   {
     if (active[0]) {
-      matrices[entry][0].lookAt(v);
+      matrices[entry][0].lookAt(pos, target, up);
     }
     if (active[1]) {
-      matrices[entry][1].lookAt(v);
+      matrices[entry][1].lookAt(pos, target, up);
     }
   }
 
 
-  void TransformStack::transform(const float v[16])
+  void TransformStack::transform(const Mat4& m)
   {
     if (active[0]) {
-      matrices[entry][0].transform(v);
+      matrices[entry][0] = m;
     }
     if (active[1]) {
-      matrices[entry][1].transform(v);
+      matrices[entry][1] = m;
     }
   }
 
 
-  void TransformStack::concatTransform(const float v[16])
+  void TransformStack::concatTransform(const Mat4& m)
   {
     if (active[0]) {
-      matrices[entry][0].concatTransform(v);
+      matrices[entry][0].concatTransform(m);
     }
     if (active[1]) {
-      matrices[entry][1].concatTransform(v);
+      matrices[entry][1].concatTransform(m);
     }
   }
 
@@ -4877,44 +4717,35 @@ namespace minipbrt {
 
   bool Parser::parse_Translate()
   {
-    float args[3];
-    for (uint32_t i = 0; i < 3; i++) {
-      args[i] = float_arg(i);
-    }
-    m_transforms->translate(args);
+    Vec3 v{ float_arg(0), float_arg(1), float_arg(2) };
+    m_transforms->translate(v);
     return true;
   }
 
 
   bool Parser::parse_Scale()
   {
-    float args[3];
-    for (uint32_t i = 0; i < 3; i++) {
-      args[i] = float_arg(i);
-    }
-    m_transforms->scale(args);
+    Vec3 v{ float_arg(0), float_arg(1), float_arg(2) };
+    m_transforms->scale(v);
     return true;
   }
 
 
   bool Parser::parse_Rotate()
   {
-    float args[4]; // angle, axis.xyz. Note that angle is in degrees!
-    for (uint32_t i = 0; i < 4; i++) {
-      args[i] = float_arg(i);
-    }
-    m_transforms->rotate(args);
+    float angleDegrees = float_arg(0);
+    Vec3 axis{ float_arg(1), float_arg(2), float_arg(3) };
+    m_transforms->rotate(degrees_to_radians(angleDegrees), axis);
     return true;
   }
 
 
   bool Parser::parse_LookAt()
   {
-    float args[9]; // pos.xyz, target.xyz and up.xyz
-    for (uint32_t i = 0; i < 9; i++) {
-      args[i] = float_arg(i);
-    }
-    m_transforms->lookAt(args);
+    Vec3 pos{ float_arg(0), float_arg(1), float_arg(2) };
+    Vec3 target{ float_arg(3), float_arg(4), float_arg(5) };
+    Vec3 up{ float_arg(6), float_arg(7), float_arg(8) };
+    m_transforms->lookAt(pos, target, up);
     return true;
   }
 
@@ -4940,22 +4771,52 @@ namespace minipbrt {
 
   bool Parser::parse_Transform()
   {
-    float args[16]; // mat4, *column* major
-    for (uint32_t i = 0; i < 16; i++) {
-      args[i] = float_arg(i);
-    }
-    m_transforms->transform(args);
+    // Somewhat bizarrely, the Transform parameters are in column-major
+    // order even though PBRT's Matrix4x4 class uses row-major order.
+    Mat4 m;
+    m.rows[0][0] = float_arg(0);
+    m.rows[1][0] = float_arg(1);
+    m.rows[2][0] = float_arg(2);
+    m.rows[3][0] = float_arg(3);
+    m.rows[0][1] = float_arg(4);
+    m.rows[1][1] = float_arg(5);
+    m.rows[2][1] = float_arg(6);
+    m.rows[3][1] = float_arg(7);
+    m.rows[0][2] = float_arg(8);
+    m.rows[1][2] = float_arg(9);
+    m.rows[2][2] = float_arg(10);
+    m.rows[3][2] = float_arg(11);
+    m.rows[0][3] = float_arg(12);
+    m.rows[1][3] = float_arg(13);
+    m.rows[2][3] = float_arg(14);
+    m.rows[3][3] = float_arg(15);
+    m_transforms->transform(m);
     return true;
   }
 
 
   bool Parser::parse_ConcatTransform()
   {
-    float args[16]; // mat4, *column* major
-    for (uint32_t i = 0; i < 16; i++) {
-      args[i] = float_arg(i);
-    }
-    m_transforms->concatTransform(args);
+    // Somewhat bizarrely, the ConcatTransform parameters are in column-major
+    // order even though PBRT's Matrix4x4 class uses row-major order.
+    Mat4 m;
+    m.rows[0][0] = float_arg(0);
+    m.rows[1][0] = float_arg(1);
+    m.rows[2][0] = float_arg(2);
+    m.rows[3][0] = float_arg(3);
+    m.rows[0][1] = float_arg(4);
+    m.rows[1][1] = float_arg(5);
+    m.rows[2][1] = float_arg(6);
+    m.rows[3][1] = float_arg(7);
+    m.rows[0][2] = float_arg(8);
+    m.rows[1][2] = float_arg(9);
+    m.rows[2][2] = float_arg(10);
+    m.rows[3][2] = float_arg(11);
+    m.rows[0][3] = float_arg(12);
+    m.rows[1][3] = float_arg(13);
+    m.rows[2][3] = float_arg(14);
+    m.rows[3][3] = float_arg(15);
+    m_transforms->concatTransform(m);
     return true;
   }
 

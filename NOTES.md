@@ -1,6 +1,84 @@
 Notes
 =====
 
+Post-multiplying by a translation matrix
+----------------------------------------
+
+    this = 
+      a b c d
+      e f g h
+      i j k l
+      m n o p
+
+    T =
+      1 0 0 x
+      0 1 0 y
+      0 0 1 z
+      0 0 0 1
+
+    this * T =
+      a b c (ax + by + cz + d)
+      e f g (ex + fy + gz + h)
+      i j k (ix + jy + kz + l)
+      m n o (mx + ny + oz + p)
+
+
+Post-multiplying by a scale matrix
+----------------------------------
+
+    this = 
+      a b c d
+      e f g h
+      i j k l
+      m n o p
+
+    S =
+      x 0 0 0
+      0 y 0 0
+      0 0 z 0
+      0 0 0 1
+
+    this * S =
+      ax by cz d
+      ex fy gz h
+      ix jy kz l
+      mx ny oz p
+
+
+Post-multiplying by a rotation matrix
+-------------------------------------
+
+    this = 
+      a b c d
+      e f g h
+      i j k l
+      m n o p
+
+    R =
+      ra rb rc 0
+      rd re rf 0
+      rg rh ri 0
+      0  0  0  1
+
+    this * R =
+      (a.ra + b.rd + c.rg)  (a.rb + b.re + c.rh)  (a.rc + b.rf + c.ri)  d
+      (e.ra + f.rd + g.rg)  (e.rb + f.re + g.rh)  (e.rc + f.rf + g.ri)  h
+      (i.ra + j.rd + k.rg)  (i.rb + j.re + k.rh)  (i.rc + j.rf + k.ri)  l
+      (m.ra + n.rd + o.rg)  (m.rb + n.re + o.rh)  (m.rc + n.rf + o.ri)  p
+
+    ra = ux * ux * (1 - cosTheta) + cosTheta
+    rb = ux * uy * (1 - cosTheta) - uz * sinTheta
+    rc = ux * uz * (1 - cosTheta) + uy * sinTheta
+
+    rd = uy * ux * (1 - cosTheta) + uz * sinTheta
+    re = uy * uy * (1 - cosTheta) + cosTheta
+    rf = uy * uz * (1 - cosTheta) - ux * sinTheta
+
+    rg = uz * ux * (1 - cosTheta) - uy * sinTheta
+    rh = uz * uy * (1 - cosTheta) + ux * sinTheta
+    ri = uz * uz * (1 - cosTheta) + cosTheta 
+
+
 Computing a 4x4 Matrix Inverse
 ------------------------------
 

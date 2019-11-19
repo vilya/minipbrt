@@ -3230,7 +3230,7 @@ namespace minipbrt {
     m_pos += countBytes;
     m_end = m_pos;
 
-    const size_t numBytes = kPLYPropertySize[uint32_t(prop.type)] * count;
+    const size_t numBytes = kPLYPropertySize[uint32_t(prop.type)] * uint32_t(count);
     if (m_pos + numBytes > m_bufEnd) {
       if (!refill_buffer() || m_pos + numBytes > m_bufEnd) {
         m_valid = false;
@@ -3324,7 +3324,7 @@ namespace minipbrt {
     m_pos += countBytes;
     m_end = m_pos;
 
-    const size_t numBytes = kPLYPropertySize[uint32_t(prop.type)] * count;
+    const size_t numBytes = kPLYPropertySize[uint32_t(prop.type)] * uint32_t(count);
     if (m_pos + numBytes > m_bufEnd) {
       if (!refill_buffer() || m_pos + numBytes > m_bufEnd) {
         m_valid = false;
@@ -3334,7 +3334,7 @@ namespace minipbrt {
     size_t back = prop.listData.size();
     prop.rowStart.push_back(static_cast<uint32_t>(back));
     prop.rowCount.push_back(static_cast<uint32_t>(count));
-    prop.listData.resize(back + numBytes * size_t(count));
+    prop.listData.resize(back + numBytes);
     std::memcpy(prop.listData.data() + back, m_pos, numBytes);
 
     const uint8_t* listEnd = prop.listData.data() + prop.listData.size();

@@ -46,6 +46,7 @@ SOFTWARE.
 /// For details about the PLY format see:
 /// * http://paulbourke.net/dataformats/ply/
 /// * https://en.wikipedia.org/wiki/PLY_(file_format)
+
 namespace miniply {
 
   //
@@ -53,6 +54,10 @@ namespace miniply {
   //
 
   static constexpr uint32_t kInvalidIndex = 0xFFFFFFFFu;
+
+  // Standard PLY element names
+  extern const char* kPLYVertexElement; // "vertex"
+  extern const char* kPLYFaceElement;   // "face"
 
 
   //
@@ -64,6 +69,7 @@ namespace miniply {
     Binary,
     BinaryBigEndian,
   };
+
 
   enum class PLYPropertyType {
     Char,
@@ -78,6 +84,7 @@ namespace miniply {
     None, //!< Special value used in Element::listCountType to indicate a non-list property.
   };
 
+
   struct PLYProperty {
     std::string name;
     PLYPropertyType type      = PLYPropertyType::None; //!< Type of the data. Must be set to a value other than None.
@@ -86,7 +93,6 @@ namespace miniply {
     uint32_t stride           = 0;
 
     std::vector<uint8_t> listData;
-    std::vector<uint32_t> rowStart; // Entry `i` is the index in listData at which the data for row i starts.
     std::vector<uint32_t> rowCount; // Entry `i` is the number of items (*not* the number of bytes) in row `i`.
   };
 
@@ -98,7 +104,28 @@ namespace miniply {
     bool                     fixedSize  = true;    //!< `true` if there are only fixed-size properties in this element, i.e. no list properties.
     uint32_t                 rowStride  = 0;
 
+    /// Returns the index for the named property in this element, or `kInvalidIndex`
+    /// if it can't be found.
     uint32_t find_property(const char* propName) const;
+
+    /// Return the indices for several properties in one go. Use it like this:
+    /// ```
+    /// uint32_t indexes[3];
+    /// if (elem.find_properties(indexes, 3, "foo", "bar", "baz")) { ... }
+    /// ```
+    /// `propIdxs` is where the property indexes will be stored. `numIdxs` is
+    /// the number of properties we will look up. There must be exactly
+    /// `numIdxs` parameters after `numIdxs`; each of the is a c-style string
+    /// giving the name of a property.
+    ///
+    /// The return value will be true if all properties were found. If it was
+    /// not true, you should not use any values from propIdxs.
+    bool find_properties(uint32_t propIdxs[], uint32_t numIdxs, ...) const;
+
+    /// Same as `find_properties`, for when you already have a `va_list`. This
+    /// is called internally by both `PLYElement::find_properties` and
+    /// `PLYReader::find_properties`.
+    bool find_properties_va(uint32_t propIdxs[], uint32_t numIdxs, va_list names) const;
   };
 
 
@@ -113,6 +140,13 @@ namespace miniply {
     bool load_element();
     void next_element();
 
+    PLYFileType file_type() const;
+    int version_major() const;
+    int version_minor() const;
+    uint32_t num_elements() const;
+    uint32_t find_element(const char* name) const;
+    const PLYElement* get_element(uint32_t idx) const;
+
     /// Check whether the current element has the given name.
     bool element_is(const char* name) const;
 
@@ -123,49 +157,37 @@ namespace miniply {
     /// `kInvalidIndex` if it can't be found.
     uint32_t find_property(const char* name) const;
 
-    /// Return the indices for several properties in one go. Use it like this:
-    /// ```
-    /// uint32_t indexes[3];
-    /// if (find_properties(indexes, 3, "foo", "bar", "baz")) { ... }
-    /// ```
-    /// `propIdxs` is where the property indexes will be stored. `numIdxs` is
-    /// the number of properties we will look up. There must be exactly
-    /// `numIdxs` parameters after `numIdxs`; each of the is a c-style string
-    /// giving the name of a property.
-    ///
-    /// The return value will be true if all properties were found. If it was
-    /// not true, you should not use any values from propIdxs.
+    /// Equivalent to calling `find_properties` on the current element.
     bool find_properties(uint32_t propIdxs[], uint32_t numIdxs, ...) const;
 
-    /// Copy the data for the specified columns into `dest`, which must be an
-    /// array with at least enough space to hold all of the extracted column
+    /// Copy the data for the specified properties into `dest`, which must be
+    /// an array with at least enough space to hold all of the extracted column
     /// data. `propIdxs` is an array containing the indexes of the properties
     /// to copy; it has `numProps` elements.
     ///
     /// `destType` specifies the data type for values stored in `dest`. All
-    /// column values will be converted to this type if necessary.
+    /// property values will be converted to this type if necessary.
     ///
     /// This function does some checks up front to pick the most efficient code
     /// path for extracting the data. It considers:
     /// (a) whether any data conversion is required.
-    /// (b) whether all column values to be extracted are contiguous in memory.
-    /// (c) whether the data to be extracted for consecutive rows is contiguous
-    ///     in memory.
+    /// (b) whether all property values to be extracted are in contiguous
+    ///     memory locations for any given item.
+    /// (c) whether the data for all rows is contiguous in memory.
     /// In the best case it reduces to a single memcpy call. In the worst case
     /// we must iterate over all values to be copied, applying type conversions
     /// as we go.
     ///
-    /// Note that this function does not handle list-valued columns. Use
+    /// Note that this function does not handle list-valued properties. Use
     /// `extract_list_column()` for those instead.
-    bool extract_columns(const uint32_t propIdxs[], uint32_t numProps, PLYPropertyType destType, void* dest) const;
+    bool extract_properties(const uint32_t propIdxs[], uint32_t numProps, PLYPropertyType destType, void* dest) const;
 
     /// Get the array of item counts for a list property. Entry `i` in this
     /// array is the number of items in the `i`th list.
     const uint32_t* get_list_counts(uint32_t propIdx) const;
 
-    const uint32_t* get_list_start_offsets(uint32_t propIdx) const;
     const uint8_t* get_list_data(uint32_t propIdx) const;
-    bool extract_list_column(uint32_t propIdx, PLYPropertyType destType, void* dest) const;
+    bool extract_list_property(uint32_t propIdx, PLYPropertyType destType, void* dest) const;
 
     uint32_t num_triangles(uint32_t propIdx) const;
     bool requires_triangulation(uint32_t propIdx) const;
@@ -260,6 +282,15 @@ namespace miniply {
 namespace miniply {
 
   //
+  // Public constants
+  //
+
+  // Standard PLY element names
+  const char* kPLYVertexElement = "vertex";
+  const char* kPLYFaceElement = "face";
+
+
+  //
   // PLY constants
   //
 
@@ -302,7 +333,6 @@ namespace miniply {
   static constexpr double kDoubleDigits[10] = { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0 };
 
   static constexpr float kPi = 3.14159265358979323846f;
-
 
 
   //
@@ -669,6 +699,13 @@ namespace miniply {
   }
 
 
+  static inline bool compatible_types(PLYPropertyType srcType, PLYPropertyType destType)
+  {
+    return (srcType == destType) ||
+        (srcType < PLYPropertyType::Float && (uint32_t(srcType) ^ 0x1) == uint32_t(destType));
+  }
+
+
   //
   // PLYElement methods
   //
@@ -681,6 +718,28 @@ namespace miniply {
       }
     }
     return kInvalidIndex;
+  }
+
+
+  bool PLYElement::find_properties(uint32_t propIdxs[], uint32_t numIdxs, ...) const
+  {
+    va_list args;
+    va_start(args, numIdxs);
+    bool foundAll = find_properties_va(propIdxs, numIdxs, args);
+    va_end(args);
+    return foundAll;
+  }
+
+
+  bool PLYElement::find_properties_va(uint32_t propIdxs[], uint32_t numIdxs, va_list names) const
+  {
+    for (uint32_t i = 0; i < numIdxs; i++) {
+      propIdxs[i] = find_property(va_arg(names, const char*));
+      if (propIdxs[i] == kInvalidIndex) {
+        return false;
+      }
+    }
+    return true;
   }
 
 
@@ -789,8 +848,6 @@ namespace miniply {
         prop.listData.shrink_to_fit();
         prop.rowCount.clear();
         prop.rowCount.shrink_to_fit();
-        prop.rowStart.clear();
-        prop.rowStart.shrink_to_fit();
       }
 
       // Clear temporary storage for the non-list properties in the current element.
@@ -920,6 +977,48 @@ namespace miniply {
   }
 
 
+  PLYFileType PLYReader::file_type() const
+  {
+    return m_fileType;
+  }
+
+
+  int PLYReader::version_major() const
+  {
+    return m_majorVersion;
+  }
+
+
+  int PLYReader::version_minor() const
+  {
+    return m_minorVersion;
+  }
+
+
+  uint32_t PLYReader::num_elements() const
+  {
+    return m_valid ? static_cast<uint32_t>(m_elements.size()) : 0;
+  }
+
+
+  uint32_t PLYReader::find_element(const char* name) const
+  {
+    for (uint32_t i = 0, endI = num_elements(); i < endI; i++) {
+      const PLYElement& elem = m_elements[i];
+      if (strcmp(elem.name.c_str(), name) == 0) {
+        return i;
+      }
+    }
+    return kInvalidIndex;
+  }
+
+
+  const PLYElement* PLYReader::get_element(uint32_t idx) const
+  {
+    return (idx < num_elements()) ? &m_elements[idx] : nullptr;
+  }
+
+
   bool PLYReader::element_is(const char* name) const
   {
     return has_element() && strcmp(element()->name.c_str(), name) == 0;
@@ -940,22 +1039,18 @@ namespace miniply {
 
   bool PLYReader::find_properties(uint32_t propIdxs[], uint32_t numIdxs, ...) const
   {
-    bool foundAll = true;
+    if (!has_element()) {
+      return false;
+    }
     va_list args;
     va_start(args, numIdxs);
-    for (uint32_t i = 0; i < numIdxs; i++) {
-      propIdxs[i] = find_property(va_arg(args, const char*));
-      if (propIdxs[i] == kInvalidIndex) {
-        foundAll = false;
-        break;
-      }
-    }
+    bool foundAll = element()->find_properties_va(propIdxs, numIdxs, args);
     va_end(args);
     return foundAll;
   }
 
 
-  bool PLYReader::extract_columns(const uint32_t propIdxs[], uint32_t numProps, PLYPropertyType destType, void *dest) const
+  bool PLYReader::extract_properties(const uint32_t propIdxs[], uint32_t numProps, PLYPropertyType destType, void *dest) const
   {
     if (numProps == 0) {
       return false;
@@ -999,7 +1094,7 @@ namespace miniply {
     for (uint32_t i = 0; i < numProps; i++) {
       uint32_t propIdx = propIdxs[i];
       const PLYProperty& prop = elem->properties[propIdx];
-      if (prop.type != destType) {
+      if (!compatible_types(prop.type, destType)) {
         conversionRequired = true;
         break;
       }
@@ -1076,15 +1171,6 @@ namespace miniply {
   }
 
 
-  const uint32_t* PLYReader::get_list_start_offsets(uint32_t propIdx) const
-  {
-    if (!has_element() || propIdx >= element()->properties.size() || element()->properties[propIdx].countType == PLYPropertyType::None) {
-      return nullptr;
-    }
-    return element()->properties[propIdx].rowStart.data();
-  }
-
-
   const uint8_t* PLYReader::get_list_data(uint32_t propIdx) const
   {
     if (!has_element() || propIdx >= element()->properties.size() || element()->properties[propIdx].countType == PLYPropertyType::None) {
@@ -1094,14 +1180,14 @@ namespace miniply {
   }
 
 
-  bool PLYReader::extract_list_column(uint32_t propIdx, PLYPropertyType destType, void *dest) const
+  bool PLYReader::extract_list_property(uint32_t propIdx, PLYPropertyType destType, void *dest) const
   {
     if (!has_element() || propIdx >= element()->properties.size() || element()->properties[propIdx].countType == PLYPropertyType::None) {
       return false;
     }
 
     const PLYProperty& prop = element()->properties[propIdx];
-    if (destType == prop.type) {
+    if (compatible_types(prop.type, destType)) {
       // If no type conversion is required, we can just copy the list data
       // directly over with a single memcpy.
       std::memcpy(dest, prop.listData.data(), prop.listData.size());
@@ -1162,26 +1248,19 @@ namespace miniply {
   bool PLYReader::extract_triangles(uint32_t propIdx, const float pos[], uint32_t numVerts, PLYPropertyType destType, void *dest) const
   {
     if (!requires_triangulation(propIdx)) {
-      return extract_list_column(propIdx, destType, dest);
+      return extract_list_property(propIdx, destType, dest);
     }
 
     const PLYElement* elem = element();
     const PLYProperty& prop = elem->properties[propIdx];
 
     const uint32_t* counts = prop.rowCount.data();
-    const uint32_t* starts = prop.rowStart.data();
     const uint8_t*  data   = prop.listData.data();
 
     uint8_t* to = reinterpret_cast<uint8_t*>(dest);
 
-    bool convertSrc = elem->properties[propIdx].type != PLYPropertyType::Int;
-    bool convertDst = destType != PLYPropertyType::Int;
-
-    std::vector<int> faceIndices;
-    faceIndices.reserve(32);
-
-    std::vector<int> triIndices;
-    triIndices.reserve(64);
+    bool convertSrc = !compatible_types(elem->properties[propIdx].type, PLYPropertyType::Int);
+    bool convertDst = !compatible_types(PLYPropertyType::Int, destType);
 
     size_t srcValBytes  = kPLYPropertySize[uint32_t(prop.type)];
     size_t destValBytes = kPLYPropertySize[uint32_t(destType)];
@@ -1190,8 +1269,8 @@ namespace miniply {
       std::vector<int> faceIndices, triIndices;
       faceIndices.reserve(32);
       triIndices.reserve(64);
+      const uint8_t* face = data;
       for (uint32_t faceIdx = 0; faceIdx < elem->count; faceIdx++) {
-        const uint8_t* face = data + starts[faceIdx];
         const uint8_t* faceEnd = face + srcValBytes * counts[faceIdx];
         faceIndices.clear();
         faceIndices.reserve(counts[faceIdx]);
@@ -1212,8 +1291,8 @@ namespace miniply {
     else if (convertSrc) {
       std::vector<int> faceIndices;
       faceIndices.reserve(32);
+      const uint8_t* face = data;
       for (uint32_t faceIdx = 0; faceIdx < elem->count; faceIdx++) {
-        const uint8_t* face = data + starts[faceIdx];
         const uint8_t* faceEnd = face + srcValBytes * counts[faceIdx];
         faceIndices.clear();
         faceIndices.reserve(counts[faceIdx]);
@@ -1230,21 +1309,22 @@ namespace miniply {
     else if (convertDst) {
       std::vector<int> triIndices;
       triIndices.reserve(64);
+      const uint8_t* face = data;
       for (uint32_t faceIdx = 0; faceIdx < elem->count; faceIdx++) {
-        const uint8_t* face = data + starts[faceIdx];
-
         triIndices.resize((counts[faceIdx] - 2) * 3);
         triangulate_polygon(counts[faceIdx], pos, numVerts, reinterpret_cast<const int*>(face), triIndices.data());
         for (int idx : triIndices) {
           copy_and_convert(to, destType, reinterpret_cast<const uint8_t*>(&idx), PLYPropertyType::Int);
           to += destValBytes;
         }
+        face += srcValBytes * counts[faceIdx];
       }
     }
     else {
+      const uint8_t* face = data;
       for (uint32_t faceIdx = 0; faceIdx < elem->count; faceIdx++) {
-        const uint8_t* face = data + starts[faceIdx];
         uint32_t numTris = triangulate_polygon(counts[faceIdx], pos, numVerts, reinterpret_cast<const int*>(face), reinterpret_cast<int*>(to));
+        face += counts[faceIdx] * srcValBytes;
         to += numTris * 3 * destValBytes;
       }
     }
@@ -1731,7 +1811,7 @@ namespace miniply {
     const size_t numBytes = kPLYPropertySize[uint32_t(prop.type)];
 
     size_t back = prop.listData.size();
-    prop.rowStart.push_back(static_cast<uint32_t>(back));
+//    prop.rowStart.push_back(static_cast<uint32_t>(back));
     prop.rowCount.push_back(static_cast<uint32_t>(count));
     prop.listData.resize(back + numBytes * size_t(count));
 
@@ -1793,7 +1873,7 @@ namespace miniply {
       }
     }
     size_t back = prop.listData.size();
-    prop.rowStart.push_back(static_cast<uint32_t>(back));
+//    prop.rowStart.push_back(static_cast<uint32_t>(back));
     prop.rowCount.push_back(static_cast<uint32_t>(count));
     prop.listData.resize(back + listBytes);
     std::memcpy(prop.listData.data() + back, m_pos, listBytes);
@@ -1850,7 +1930,7 @@ namespace miniply {
       }
     }
     size_t back = prop.listData.size();
-    prop.rowStart.push_back(static_cast<uint32_t>(back));
+//    prop.rowStart.push_back(static_cast<uint32_t>(back));
     prop.rowCount.push_back(static_cast<uint32_t>(count));
     prop.listData.resize(back + listBytes);
 
@@ -4270,14 +4350,14 @@ namespace minipbrt {
         }
         trimesh->num_vertices = reader.num_rows();
         trimesh->P = new float[trimesh->num_vertices * 3];
-        reader.extract_columns(propIdxs, 3, miniply::PLYPropertyType::Float, trimesh->P);
+        reader.extract_properties(propIdxs, 3, miniply::PLYPropertyType::Float, trimesh->P);
         if (reader.find_normal(propIdxs)) {
           trimesh->N = new float[trimesh->num_vertices * 3];
-          reader.extract_columns(propIdxs, 3, miniply::PLYPropertyType::Float, trimesh->N);
+          reader.extract_properties(propIdxs, 3, miniply::PLYPropertyType::Float, trimesh->N);
         }
         if (reader.find_texcoord(propIdxs)) {
           trimesh->uv = new float[trimesh->num_vertices * 2];
-          reader.extract_columns(propIdxs, 2, miniply::PLYPropertyType::Float, trimesh->uv);
+          reader.extract_properties(propIdxs, 2, miniply::PLYPropertyType::Float, trimesh->uv);
         }
         gotVerts = true;
       }
@@ -4302,7 +4382,7 @@ namespace minipbrt {
         else {
           trimesh->num_indices = reader.num_rows() * 3;
           trimesh->indices = new int[trimesh->num_indices];
-          reader.extract_list_column(propIdx, miniply::PLYPropertyType::Int, trimesh->indices);
+          reader.extract_list_property(propIdx, miniply::PLYPropertyType::Int, trimesh->indices);
         }
         gotFaces = true;
       }

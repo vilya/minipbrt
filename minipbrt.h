@@ -25,6 +25,7 @@ SOFTWARE.
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
+#include <limits>
 #include <map>
 #include <vector>
 

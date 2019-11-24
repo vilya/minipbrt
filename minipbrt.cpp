@@ -98,11 +98,13 @@ namespace miniply {
 
 
   struct PLYElement {
-    std::string              name;                 //!< Name of this element.
+    std::string              name;              //!< Name of this element.
     std::vector<PLYProperty> properties;
-    uint32_t                 count      = 0;       //!< The number of items in this element (e.g. the number of vertices if this is the vertex element).
-    bool                     fixedSize  = true;    //!< `true` if there are only fixed-size properties in this element, i.e. no list properties.
-    uint32_t                 rowStride  = 0;
+    uint32_t                 count      = 0;    //!< The number of items in this element (e.g. the number of vertices if this is the vertex element).
+    bool                     fixedSize  = true; //!< `true` if there are only fixed-size properties in this element, i.e. no list properties.
+    uint32_t                 rowStride  = 0;    //!< The number of bytes from the start of one row to the start of the next, for this element.
+
+    void calculate_offsets();
 
     /// Returns the index for the named property in this element, or `kInvalidIndex`
     /// if it can't be found.
@@ -126,6 +128,27 @@ namespace miniply {
     /// is called internally by both `PLYElement::find_properties` and
     /// `PLYReader::find_properties`.
     bool find_properties_va(uint32_t propIdxs[], uint32_t numIdxs, va_list names) const;
+
+    /// Call this on the element at some point before you load its data, when
+    /// you know that every row's list will have the same length. It will
+    /// replace the single variable-size property with a set of new fixed-size
+    /// properties: one for the list count, followed by one for each of the
+    /// list values. This will allow miniply to load and extract the property
+    /// data a lot more efficiently, giving a big performance increase.
+    ///
+    /// After you've called this, you must use PLYReader's `extract_columns`
+    /// method to get the data, rather than `extract_list_column`.
+    ///
+    /// The `newPropIdxs` parameter must be an array with at least `listSize`
+    /// entries. If the function returns true, this will have been populated
+    /// with the indices of the new properties that represent the list values
+    /// (i.e. not including the list count property, which will have the same
+    /// index as the old list property).
+    ///
+    /// The function returns false if the property index is invalid, or the
+    /// property it refers to is not a list property. In these cases it will
+    /// not modify anything. Otherwise it will return true.
+    bool convert_list_to_fixed_size(uint32_t listPropIdx, uint32_t listSize, uint32_t newPropIdxs[]);
   };
 
 
@@ -145,7 +168,7 @@ namespace miniply {
     int version_minor() const;
     uint32_t num_elements() const;
     uint32_t find_element(const char* name) const;
-    const PLYElement* get_element(uint32_t idx) const;
+    PLYElement* get_element(uint32_t idx);
 
     /// Check whether the current element has the given name.
     bool element_is(const char* name) const;
@@ -223,8 +246,6 @@ namespace miniply {
     bool parse_elements();
     bool parse_element();
     bool parse_property(std::vector<PLYProperty>& properties);
-
-    void setup_element(PLYElement& elem);
 
     bool load_fixed_size_element(PLYElement& elem);
     bool load_variable_size_element(PLYElement& elem);
@@ -710,6 +731,30 @@ namespace miniply {
   // PLYElement methods
   //
 
+  void PLYElement::calculate_offsets()
+  {
+    fixedSize = true;
+    for (PLYProperty& prop : properties) {
+      if (prop.countType != PLYPropertyType::None) {
+        fixedSize = false;
+        break;
+      }
+    }
+
+    // Note that each list property gets its own separate storage. Only fixed
+    // size properties go into the common data block. The `rowStride` is the
+    // size of a row in the common data block.
+    rowStride = 0;
+    for (PLYProperty& prop : properties) {
+      if (prop.countType != PLYPropertyType::None) {
+        continue;
+      }
+      prop.offset = rowStride;
+      rowStride += kPLYPropertySize[uint32_t(prop.type)];
+    }
+  }
+
+
   uint32_t PLYElement::find_property(const char *propName) const
   {
     for (uint32_t i = 0, endI = uint32_t(properties.size()); i < endI; i++) {
@@ -739,6 +784,51 @@ namespace miniply {
         return false;
       }
     }
+    return true;
+  }
+
+
+  bool PLYElement::convert_list_to_fixed_size(uint32_t listPropIdx, uint32_t listSize, uint32_t newPropIdxs[])
+  {
+    if (fixedSize || listPropIdx >= properties.size() || properties[listPropIdx].countType == PLYPropertyType::None) {
+      return false;
+    }
+
+    PLYProperty oldListProp = properties[listPropIdx];
+    char nameBuf[512];
+
+    // Set up a property for the list count column.
+    PLYProperty& countProp = properties[listPropIdx];
+    snprintf(nameBuf, sizeof(nameBuf), "%s_count", oldListProp.name.c_str());
+    countProp.name = nameBuf;
+    countProp.type = oldListProp.countType;
+    countProp.countType = PLYPropertyType::None;
+    countProp.stride = kPLYPropertySize[uint32_t(oldListProp.countType)];
+
+    if (listSize > 0) {
+      // Set up additional properties for the list entries, 1 per entry.
+      if (listPropIdx + 1 == properties.size()) {
+        properties.resize(properties.size() + listSize);
+      }
+      else {
+        properties.insert(properties.begin() + listPropIdx + 1, listSize, PLYProperty());
+      }
+
+      for (uint32_t i = 0; i < listSize; i++) {
+        uint32_t propIdx = listPropIdx + 1 + i;
+
+        PLYProperty& itemProp = properties[propIdx];
+        snprintf(nameBuf, sizeof(nameBuf), "%s_%u", oldListProp.name.c_str(), i);
+        itemProp.name = nameBuf;
+        itemProp.type = oldListProp.type;
+        itemProp.countType = PLYPropertyType::None;
+        itemProp.stride = kPLYPropertySize[uint32_t(oldListProp.type)];
+
+        newPropIdxs[i] = propIdx;
+      }
+    }
+
+    calculate_offsets();
     return true;
   }
 
@@ -782,7 +872,7 @@ namespace miniply {
     }
 
     for (PLYElement& elem : m_elements) {
-      setup_element(elem);
+      elem.calculate_offsets();
     }
   }
 
@@ -1013,7 +1103,7 @@ namespace miniply {
   }
 
 
-  const PLYElement* PLYReader::get_element(uint32_t idx) const
+  PLYElement* PLYReader::get_element(uint32_t idx)
   {
     return (idx < num_elements()) ? &m_elements[idx] : nullptr;
   }
@@ -1484,7 +1574,7 @@ namespace miniply {
       }
       ++m_pos; // move past the newline char
       m_end = m_pos;
-    } while (match("comment"));
+    } while (match("comment") || match("obj_info"));
 
     return true;
   }
@@ -1643,28 +1733,6 @@ namespace miniply {
   }
 
 
-  void PLYReader::setup_element(PLYElement& elem)
-  {
-    for (PLYProperty& prop : elem.properties) {
-      if (prop.countType != PLYPropertyType::None) {
-        elem.fixedSize = false;
-      }
-    }
-
-    // Note that each list property gets its own separate storage. Only fixed
-    // size properties go into the common data block. The `rowStride` is the
-    // size of a row in the common data block.
-
-    for (PLYProperty& prop : elem.properties) {
-      if (prop.countType != PLYPropertyType::None) {
-        continue;
-      }
-      prop.offset = elem.rowStride;
-      elem.rowStride += kPLYPropertySize[uint32_t(prop.type)];
-    }
-  }
-
-
   bool PLYReader::load_fixed_size_element(PLYElement& elem)
   {
     size_t numBytes = elem.count * elem.rowStride;
@@ -1811,7 +1879,6 @@ namespace miniply {
     const size_t numBytes = kPLYPropertySize[uint32_t(prop.type)];
 
     size_t back = prop.listData.size();
-//    prop.rowStart.push_back(static_cast<uint32_t>(back));
     prop.rowCount.push_back(static_cast<uint32_t>(count));
     prop.listData.resize(back + numBytes * size_t(count));
 
@@ -1873,7 +1940,6 @@ namespace miniply {
       }
     }
     size_t back = prop.listData.size();
-//    prop.rowStart.push_back(static_cast<uint32_t>(back));
     prop.rowCount.push_back(static_cast<uint32_t>(count));
     prop.listData.resize(back + listBytes);
     std::memcpy(prop.listData.data() + back, m_pos, listBytes);
@@ -1930,7 +1996,6 @@ namespace miniply {
       }
     }
     size_t back = prop.listData.size();
-//    prop.rowStart.push_back(static_cast<uint32_t>(back));
     prop.rowCount.push_back(static_cast<uint32_t>(count));
     prop.listData.resize(back + listBytes);
 
@@ -2745,21 +2810,6 @@ namespace minipbrt {
 
 
   //
-  // Vec2 type
-  //
-
-  struct Vec2 {
-    float x, y;
-  };
-
-  static inline Vec2 operator - (Vec2 lhs, Vec2 rhs) { return Vec2{ lhs.x - rhs.x, lhs.y - rhs.y }; }
-
-  static inline float dot(Vec2 lhs, Vec2 rhs) { return lhs.x * rhs.x + lhs.y * rhs.y; }
-  static inline float length(Vec2 v) { return std::sqrt(dot(v, v)); }
-  static inline Vec2 normalize(Vec2 v) { float len = length(v); return Vec2{ v.x / len, v.y / len }; }
-
-
-  //
   // Vec3 type
   //
 
@@ -3130,12 +3180,6 @@ namespace minipbrt {
   static inline bool is_alnum(char ch)
   {
     return is_digit(ch) || is_letter(ch);
-  }
-
-
-  static inline bool is_keyword_start(char ch)
-  {
-    return is_letter(ch) || ch == '_';
   }
 
 
@@ -3643,40 +3687,6 @@ namespace minipbrt {
     float xyz[3];
     blackbody_to_xyz(blackbody, xyz);
     xyz_to_rgb(xyz, rgb);
-  }
-
-
-  static void endian_swap_2(uint8_t* data)
-  {
-    uint8_t tmp = data[0];
-    data[0] = data[1];
-    data[1] = tmp;
-  }
-
-
-  static void endian_swap_4(uint8_t* data)
-  {
-    uint8_t tmp = data[0];
-    data[0] = data[3];
-    data[3] = tmp;
-    tmp = data[1];
-    data[1] = data[2];
-    data[2] = tmp;
-  }
-
-
-  static void endian_swap_8(uint8_t* data)
-  {
-    uint8_t tmp[8];
-    data[0] = tmp[7];
-    data[1] = tmp[6];
-    data[2] = tmp[5];
-    data[3] = tmp[4];
-    data[4] = tmp[3];
-    data[5] = tmp[2];
-    data[6] = tmp[1];
-    data[7] = tmp[0];
-    std::memcpy(data, tmp, 8);
   }
 
 

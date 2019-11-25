@@ -164,10 +164,10 @@ namespace minipbrt {
       return;
     }
 
-    fprintf(stderr, "[%s, line %lld, column %lld] %s\n",
+    fprintf(stderr, "[%s, line %u, column %u] %s\n",
             err->filename(),
-            err->line(),
-            err->column(),
+            uint32_t(err->line()),
+            uint32_t(err->column()),
             err->message());
   }
 
@@ -789,7 +789,7 @@ int main(int argc, char** argv)
              timer.elapsedSecs());
       if (!ok) {
         const minipbrt::Error* err = loader.error();
-        printf(" ---> [%s, line %lld, column %lld] %s\n", err->filename(), err->line(), err->column(), err->message());
+        printf(" ---> [%s, line %u, column %u] %s\n", err->filename(), uint32_t(err->line()), uint32_t(err->column()), err->message());
         ++numFailed;
       }
       else if (!plyOK) {

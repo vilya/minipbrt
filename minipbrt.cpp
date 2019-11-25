@@ -4862,25 +4862,28 @@ namespace minipbrt {
 
     char* tmpBuf = new char[m_bufCapacity];
     int64_t tmpBufOffset = 0;
+    int64_t n;
 
     file_seek(fdata->f, 0, SEEK_SET);
     for (int64_t i = 0, endI = posOffset / int64_t(m_bufCapacity); i < endI; i++) {
-      fread(tmpBuf, sizeof(char), m_bufCapacity, fdata->f);
-      for (int64_t j = 0, endJ = int64_t(m_bufCapacity); j < endJ; j++) {
+      n = int64_t(fread(tmpBuf, sizeof(char), m_bufCapacity, fdata->f));
+      for (int64_t j = 0, endJ = int64_t(n); j < endJ; j++) {
         if (tmpBuf[j] == '\n') {
           ++localLine;
           newline = j + i * int64_t(m_bufCapacity);
         }
       }
-      tmpBufOffset += int64_t(m_bufCapacity);
+      tmpBufOffset += n;
     }
-    fread(tmpBuf, sizeof(char), m_bufCapacity, fdata->f);
-    for (int64_t j = 0, endJ = posOffset - tmpBufOffset; j < endJ; j++) {
+    n = int64_t(fread(tmpBuf, sizeof(char), m_bufCapacity, fdata->f));
+    for (int64_t j = 0, endJ = std::min(posOffset - tmpBufOffset, n); j < endJ; j++) {
       if (tmpBuf[j] == '\n') {
         ++localLine;
         newline = j + tmpBufOffset;
       }
     }
+
+    delete[] tmpBuf;
 
     *line = localLine;
     *col = posOffset - newline;

@@ -19,6 +19,7 @@ Features
 - *Thread-friendly*: designed so that PLY files can be loaded, or shapes
    turned into triangle meshes, on multiple threads; and can be integrated 
    easily with your own threading system of choice.
+- *Cross platform*: works on Windows, macOS and Linux.
 - Converts spectrum values to RGB at load time using the CIE XYZ response 
   curves.
 - Utility functions for converting shapes into triangle meshes.

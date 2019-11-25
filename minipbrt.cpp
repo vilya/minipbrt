@@ -445,17 +445,6 @@ namespace miniply {
   }
 
 
-  static inline int64_t file_pos(FILE* file)
-  {
-  #ifdef _WIN32
-    return _ftelli64(file);
-  #else
-    static_assert(sizeof(off_t) == sizeof(int64_t), "off_t is not 64 bits.");
-    return ftello(file);
-  #endif
-  }
-
-
   static inline int file_seek(FILE* file, int64_t offset, int origin)
   {
   #ifdef _WIN32
@@ -5844,7 +5833,7 @@ namespace minipbrt {
           return false;
         }
         heightfield->Pz = new float[heightfield->nu * heightfield->nv];
-        if (!float_array_param("Pz", ParamType::Float, heightfield->nu * heightfield->nv, heightfield->Pz)) {
+        if (!float_array_param("Pz", ParamType::Float, uint32_t(heightfield->nu * heightfield->nv), heightfield->Pz)) {
           m_tokenizer.set_error("Required parameter \"Pz\" was missing or invalid");
           delete heightfield;
           return false;
@@ -5885,8 +5874,8 @@ namespace minipbrt {
         }
         nurbs->uknots = new float[nurbs->nu + nurbs->uorder];
         nurbs->vknots = new float[nurbs->nv + nurbs->vorder];
-        ok = float_array_param("uknots", ParamType::Float, nurbs->nu + nurbs->uorder, nurbs->uknots) &&
-             float_array_param("vknots", ParamType::Float, nurbs->nv + nurbs->vorder, nurbs->vknots);
+        ok = float_array_param("uknots", ParamType::Float, uint32_t(nurbs->nu + nurbs->uorder), nurbs->uknots) &&
+             float_array_param("vknots", ParamType::Float, uint32_t(nurbs->nv + nurbs->vorder), nurbs->vknots);
         if (!ok) {
           m_tokenizer.set_error("Missing or invalid data for knot arrays");
           delete nurbs;
@@ -5905,7 +5894,7 @@ namespace minipbrt {
           delete nurbs;
           return false;
         }
-        if (count % divisor != 0 || (count / divisor) != (nurbs->nu * nurbs->nv)) {
+        if (count % divisor != 0 || (count / divisor) != uint32_t(nurbs->nu * nurbs->nv)) {
           m_tokenizer.set_error("Invalid NURBS control point data");
           delete nurbs;
           return false;

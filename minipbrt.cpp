@@ -4585,7 +4585,7 @@ namespace minipbrt {
       }
       delete[] m_fileData[i].filename;
     }
-    delete m_fileData;
+    delete[] m_fileData;
     delete[] m_buf;
     delete m_error;
   }

@@ -2986,8 +2986,6 @@ namespace minipbrt {
 
     size_t token_length() const;
 
-    bool advance_to_symbol(const char* str);
-
     const char* get_filename() const;
     const char* get_original_filename() const;
 
@@ -5106,31 +5104,7 @@ namespace minipbrt {
   }
 
 
-  bool Tokenizer::advance_to_symbol(const char* str)
   {
-    assert(str != nullptr);
-
-    bool ok = true;
-    while (ok && advance()) {
-      if (match_symbol(str)) {
-        return true;
-      }
-
-      if (*m_pos == '"') {
-        ok = string_literal(nullptr, 0);
-      }
-      else if (is_digit(*m_pos)) {
-        ok = float_literal(nullptr);
-      }
-      else if (is_letter(*m_pos) || *m_pos == '_') {
-        ok = identifier(nullptr, 0);
-      }
-      else {
-        m_end = m_pos + 1;
-        ok = true;
-      }
-    }
-    return false;
   }
 
 

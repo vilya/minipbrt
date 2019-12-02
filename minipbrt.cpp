@@ -2985,6 +2985,7 @@ namespace minipbrt {
     bool which_keyword(const char* values[], int* index);
 
     size_t token_length() const;
+    const char* token() const;
 
     const char* get_filename() const;
     const char* get_original_filename() const;
@@ -3154,6 +3155,7 @@ namespace minipbrt {
     uint32_t find_texture(const char* name, TextureData dataType) const;
 
     void push_bytes(void* src, size_t numBytes);
+    void push_string(const char* src, size_t len);
 
   private:
     Tokenizer m_tokenizer;
@@ -5104,7 +5106,9 @@ namespace minipbrt {
   }
 
 
+  const char* Tokenizer::token() const
   {
+    return m_pos;
   }
 
 
@@ -5334,7 +5338,6 @@ namespace minipbrt {
     bool parsedEnum = false;
     int tmpInt;
     float tmpFloat;
-    char tmpStr[512];
     bool ok = true;
 
     bool bracketed = m_tokenizer.advance() && m_tokenizer.match_symbol("[");
@@ -5381,10 +5384,10 @@ namespace minipbrt {
         break;
 
       case 's':
-        ok = m_tokenizer.string_literal(tmpStr, sizeof(tmpStr));
+        ok = m_tokenizer.string_literal(nullptr, 0);
         if (ok) {
           m_params.push_back(ParamInfo{ "", ParamType::String, m_temp.size(), 1 });
-          push_bytes(tmpStr, m_tokenizer.token_length() + 1);
+          push_string(m_tokenizer.token() + 1, m_tokenizer.token_length() - 2); // The +1 and -2 are trimming off the surrounding double quote chars.
         }
         break;
 
@@ -7589,19 +7592,18 @@ namespace minipbrt {
   {
     *count = 0;
 
-    char str[1024];
     bool ok;
     if (m_tokenizer.match_symbol("[")) {
       while (m_tokenizer.advance()) {
         if (m_tokenizer.match_symbol("]")) {
           return true;
         }
-        ok = m_tokenizer.string_literal(str, sizeof(str));
+        ok = m_tokenizer.string_literal(nullptr, 0);
         if (!ok) {
           m_tokenizer.set_error("Failed to parse string literal");
           return false;
         }
-        push_bytes(str, m_tokenizer.token_length() + 1);
+        push_string(m_tokenizer.token() + 1, m_tokenizer.token_length() - 2);
         (*count)++;
       }
 
@@ -7609,12 +7611,12 @@ namespace minipbrt {
       return false;
     }
     else {
-      ok = m_tokenizer.string_literal(str, sizeof(str));
+      ok = m_tokenizer.string_literal(nullptr, 0);
       if (!ok) {
         m_tokenizer.set_error("Failed to parse string literal");
         return false;
       }
-      push_bytes(str, m_tokenizer.token_length() + 1);
+      push_string(m_tokenizer.token() + 1, m_tokenizer.token_length() - 2);
       (*count)++;
       return true;
     }
@@ -8141,6 +8143,15 @@ namespace minipbrt {
     size_t start = m_temp.size();
     m_temp.resize(start + numBytes);
     std::memcpy(m_temp.data() + start, src, numBytes);
+  }
+
+
+  void Parser::push_string(const char* src, size_t len)
+  {
+    size_t start = m_temp.size();
+    m_temp.resize(start + len + 1);
+    std::memcpy(m_temp.data() + start, src, len);
+    m_temp[start + len] = '\0';
   }
 
 

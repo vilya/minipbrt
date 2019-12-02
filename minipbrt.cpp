@@ -4579,11 +4579,13 @@ namespace minipbrt {
 
   Tokenizer::~Tokenizer()
   {
-    for (uint32_t i = 0; i <= m_includeDepth; i++) {
-      if (m_fileData[i].f != nullptr) {
-        fclose(m_fileData[i].f);
+    if (m_fileData != nullptr) {
+      for (uint32_t i = 0; i <= m_includeDepth; i++) {
+        if (m_fileData[i].f != nullptr) {
+          fclose(m_fileData[i].f);
+        }
+        delete[] m_fileData[i].filename;
       }
-      delete[] m_fileData[i].filename;
     }
     delete[] m_fileData;
     delete[] m_buf;

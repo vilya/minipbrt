@@ -2857,7 +2857,6 @@ namespace minipbrt {
     void scale(Vec3 v);                               //!< Multiply this matrix by a scale matrix.
     void rotate(const float angleRadians, Vec3 axis); //!< Multiply this matrix by a rotation matrix.
     void lookAt(Vec3 pos, Vec3 target, Vec3 up);      //!< Multiply this matrix by a lookAt matrix.
-    void transform(const Mat4& m);                    //!< Set this to the given matrix.
     void concatTransform(const Mat4& m);              //!< Multiply this matrix by the given matrix.
 
     float det2x2(int r0, int r1, int c0, int c1) const;
@@ -3171,6 +3170,8 @@ namespace minipbrt {
     uint32_t m_statementIndex = uint32_t(-1);
     std::vector<ParamInfo> m_params;
     std::vector<uint8_t> m_temp;
+
+    std::unordered_map<std::string, const char*> m_paramNames;
   };
 
 
@@ -5195,6 +5196,10 @@ namespace minipbrt {
     delete m_transforms;
     delete m_attrs;
     delete m_scene;
+
+    for (auto it : m_paramNames) {
+      delete[] it.second;
+    }
   }
 
 
@@ -7448,7 +7453,14 @@ namespace minipbrt {
     }
 
     if (ok) {
-      param.name = copy_string(paramNameBuf);
+      auto it = m_paramNames.find(paramNameBuf);
+      if (it == m_paramNames.end()) {
+        param.name = copy_string(paramNameBuf);
+        m_paramNames[param.name] = param.name;
+      }
+      else {
+        param.name = it->second;
+      }
       m_params.push_back(param);
     }
 

@@ -1,18 +1,6 @@
 TO DO
 =====
 
-Correctness
------------
-
-Remove all hard-coded limits on string length:
-* We use a lot of locally-declared char arrays as temp storage for strings,
-  which give an implicit max length for the strings they deal with.
-* Remove these. Enum strings should be processed in-buffer, name strings &
-  filenames should be copied into the temp param data.
-* The only practical limit should be the buffer length (would be nice to
-  remove that limit too, but not if it reduces performance).
-
-
 Features
 --------
 

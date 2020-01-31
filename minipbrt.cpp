@@ -2406,6 +2406,7 @@ namespace minipbrt {
   //
 
   static constexpr size_t kDefaultBufCapacity = 1024 * 1024 - 1;
+  static constexpr size_t kTempBufferCapacity = 64 * 1024 - 1;
 
   static const double kDoubleDigits[10] = { 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0 };
 
@@ -2993,6 +2994,9 @@ namespace minipbrt {
     bool has_error() const;
     const Error* get_error() const;
 
+
+    char* temp_buffer(); // Allow other objects to use the Tokenizer's temp buffer.
+
   private:
     struct FileData {
       const char* filename = nullptr;
@@ -3015,6 +3019,9 @@ namespace minipbrt {
     const char* m_end = nullptr;
 
     Error* m_error = nullptr;
+
+
+    char* m_tmpBuf = nullptr;
   };
 
 
@@ -3172,6 +3179,9 @@ namespace minipbrt {
     std::vector<uint8_t> m_temp;
 
     std::unordered_map<std::string, const char*> m_paramNames;
+
+    // Temporary storage for processing strings.
+    char* m_tmpBuf = nullptr;
   };
 
 
@@ -3282,11 +3292,18 @@ namespace minipbrt {
       return false;
     }
 
-    if (currentLen > 0) {
-      memcpy(buf, current, sizeof(char) * currentLen);
-      buf += currentLen;
+    if (filename >= buf && filename < (buf + currentLen)) {
+      if (currentLen > 0) {
+        memmove(buf + sizeof(char) * currentLen, filename, sizeof(char) * currentLen);
+        memcpy(buf, current, sizeof(char) * currentLen);
+      }
     }
-    memcpy(buf, filename, sizeof(char) * filenameLen);
+    else {
+      if (currentLen > 0) {
+        memcpy(buf, current, sizeof(char) * currentLen);
+      }
+      memcpy(buf + currentLen, filename, sizeof(char) * filenameLen);
+    }
     return true;
   }
 
@@ -4496,14 +4513,9 @@ namespace minipbrt {
 
   bool Scene::shapes_to_triangle_mesh(Bits<ShapeType> typesToConvert)
   {
-    for (Shape*& shape : shapes) {
-      if (typesToConvert.contains(shape->type())) {
-        TriangleMesh* trimesh = shape->triangle_mesh();
-        if (trimesh == nullptr) {
-          return false;
-        }
-        delete shape;
-        shape = trimesh;
+    for (uint32_t i = 0, endi = static_cast<uint32_t>(shapes.size()); i < endi; i++) {
+      if (typesToConvert.contains(shapes[i]->type()) && !to_triangle_mesh(i)) {
+        return false;
       }
     }
     return true;
@@ -4621,6 +4633,7 @@ namespace minipbrt {
     }
     delete[] m_fileData;
     delete[] m_buf;
+    delete[] m_tmpBuf;
     delete m_error;
   }
 
@@ -4669,6 +4682,9 @@ namespace minipbrt {
     m_bufEnd = m_buf + m_bufCapacity;
     m_pos = m_bufEnd;
     m_end = m_bufEnd;
+
+    m_tmpBuf = new char[kTempBufferCapacity + 1];
+    m_tmpBuf[kTempBufferCapacity] = '\0';
 
     return refill_buffer();
   }
@@ -4804,13 +4820,11 @@ namespace minipbrt {
       return false;
     }
 
-    const size_t realnameMax = 1024;
-    char realname[realnameMax];
-    resolve_file(filename, m_fileData[0].filename, realname, realnameMax);
+    resolve_file(filename, m_fileData[0].filename, m_tmpBuf, kTempBufferCapacity);
 
     FILE* f = nullptr;
-    if (file_open(&f, realname, "rb") != 0) {
-      set_error("Failed to include %s, full path = %s", filename, realname);
+    if (file_open(&f, m_tmpBuf, "rb") != 0) {
+      set_error("Failed to include %s, full path = %s", filename, m_tmpBuf);
       return false;
     }
 
@@ -4821,7 +4835,7 @@ namespace minipbrt {
     m_includeDepth++;
 
     FileData* fdata = &m_fileData[m_includeDepth];
-    fdata->filename = copy_string(realname);
+    fdata->filename = copy_string(m_tmpBuf);
     fdata->f = f;
     fdata->atEOF = false;
     fdata->reportEOF = reportEOF;
@@ -5170,6 +5184,13 @@ namespace minipbrt {
   const Error* Tokenizer::get_error() const
   {
     return m_error;
+  }
+
+
+
+  char* Tokenizer::temp_buffer()
+  {
+    return m_tmpBuf;
   }
 
 
@@ -7539,8 +7560,8 @@ namespace minipbrt {
     }
 
     bool ok;
-    char filename[512];
-    if (m_tokenizer.string_literal(filename, sizeof(filename))) {
+    char* filename = m_tokenizer.temp_buffer();
+    if (m_tokenizer.string_literal(filename, kTempBufferCapacity)) {
       if (bracketed) {
         ok = m_tokenizer.advance() && m_tokenizer.match_symbol("]");
         if (!ok) {
@@ -7550,7 +7571,10 @@ namespace minipbrt {
       }
       m_tokenizer.advance();
 
+      filename = copy_string(filename);
       ok = m_tokenizer.push_file(filename, true);
+      delete[] filename;
+
       if (!ok) {
         m_tokenizer.set_error("Failed to open SPD file %s", filename);
         return false;
@@ -7760,9 +7784,8 @@ namespace minipbrt {
       return true;
     }
 
-    const size_t realnameMax = 1024;
-    char realname[realnameMax];
-    if (!resolve_file(tmp, m_tokenizer.get_original_filename(), realname, realnameMax)) {
+    char* realname = m_tokenizer.temp_buffer();
+    if (!resolve_file(tmp, m_tokenizer.get_original_filename(), realname, kTempBufferCapacity)) {
       return false;
     }
     *dest = copy_string(realname);

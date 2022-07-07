@@ -6355,6 +6355,7 @@ namespace minipbrt {
     if (materialOut != nullptr) {
       *materialOut = static_cast<uint32_t>(m_scene->materials.size());
     }
+    m_attrs->top->materials.push_back(static_cast<uint32_t>(m_scene->materials.size()));
     m_scene->materials.push_back(material);
     return true;
   }

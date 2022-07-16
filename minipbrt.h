@@ -1482,13 +1482,13 @@ namespace minipbrt {
     /// `typesToConvert`. The return value is `true` if we were able to convert
     /// all relevant shapes successfully, or `false` if there were any we
     /// couldn't convert.
-    bool shapes_to_triangle_mesh(Bits<ShapeType> typesToConvert);
+    bool shapes_to_triangle_mesh(Bits<ShapeType> typesToConvert, bool stopOnFirstError=true);
 
     /// Convert all shapes to triangle meshes.
-    bool all_to_triangle_mesh();
+    bool all_to_triangle_mesh(bool stopOnFirstError=true);
 
     /// Shorthand for `shapes_to_triangle_mesh(ShapeType::PLYMesh)`.
-    bool load_all_ply_meshes();
+    bool load_all_ply_meshes(bool stopOnFirstError=true);
   };
 
 

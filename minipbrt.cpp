@@ -4511,29 +4511,37 @@ namespace minipbrt {
   }
 
 
-  bool Scene::shapes_to_triangle_mesh(Bits<ShapeType> typesToConvert)
+  bool Scene::shapes_to_triangle_mesh(Bits<ShapeType> typesToConvert, bool stopOnFirstError)
   {
+    bool allOK = true;
     for (uint32_t i = 0, endi = static_cast<uint32_t>(shapes.size()); i < endi; i++) {
-      if (typesToConvert.contains(shapes[i]->type()) && !to_triangle_mesh(i)) {
-        return false;
+      if (!typesToConvert.contains(shapes[i]->type())) {
+        continue;
+      }
+      bool ok = to_triangle_mesh(i);
+      if (!ok) {
+        allOK = false;
+        if (stopOnFirstError) {
+          break;
+        }
       }
     }
-    return true;
+    return allOK;
   }
 
 
-  bool Scene::all_to_triangle_mesh()
+  bool Scene::all_to_triangle_mesh(bool stopOnFirstError)
   {
     Bits<ShapeType> types;
     types.setAll();
     types.clear(ShapeType::TriangleMesh);
-    return shapes_to_triangle_mesh(types);
+    return shapes_to_triangle_mesh(types, stopOnFirstError);
   }
 
 
-  bool Scene::load_all_ply_meshes()
+  bool Scene::load_all_ply_meshes(bool stopOnFirstError)
   {
-    return shapes_to_triangle_mesh(ShapeType::PLYMesh);
+    return shapes_to_triangle_mesh(ShapeType::PLYMesh, stopOnFirstError);
   }
 
 

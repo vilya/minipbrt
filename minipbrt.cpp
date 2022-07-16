@@ -7077,7 +7077,7 @@ namespace minipbrt {
       ImageFilm* img = new ImageFilm();
       int_param("xresolution", &img->xresolution);
       int_param("yresolution", &img->yresolution);
-      float_array_param("cropwindow", ParamType::Float, 4, img->cropwwindow);
+      float_array_param("cropwindow", ParamType::Float, 4, img->cropwindow);
       float_param("scale", &img->scale);
       float_param("maxsampleluminance", &img->maxsampleluminance);
       float_param("diagonal", &img->diagonal);

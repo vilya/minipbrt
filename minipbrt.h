@@ -353,7 +353,7 @@ namespace minipbrt {
   struct ImageFilm : public Film {
     int xresolution           = 640;
     int yresolution           = 480;
-    float cropwwindow[4]      = { 0.0f, 1.0f, 0.0f, 1.0f };
+    float cropwindow[4]       = { 0.0f, 1.0f, 0.0f, 1.0f };
     float scale               = 1.0f;
     float maxsampleluminance  = std::numeric_limits<float>::infinity();
     float diagonal            = 35.0f; // in millimetres

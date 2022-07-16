@@ -1,3 +1,6 @@
+#ifndef MINIPBRT_H
+#define MINIPBRT_H
+
 /*
 MIT License
 
@@ -1546,3 +1549,5 @@ namespace minipbrt {
   };
 
 } // namespace minipbrt
+
+#endif // MINIPBRT_H

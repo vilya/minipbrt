@@ -6053,7 +6053,8 @@ namespace minipbrt {
         InfiniteLight* infinite = new InfiniteLight();
         spectrum_param("L", infinite->L);
         int_param("samples", &infinite->samples);
-        string_param("mapname", &infinite->mapname, true);
+//        string_param("mapname", &infinite->mapname, true);
+        filename_param("mapname", &infinite->mapname);
         light = infinite;
       }
       break;
@@ -6825,7 +6826,8 @@ namespace minipbrt {
     case TextureType::ImageMap:
       {
         ImageMapTexture* imagemap = new ImageMapTexture();
-        if (!string_param("filename", &imagemap->filename, true)) {
+          if (!filename_param("filename", &imagemap->filename)) {
+//        if (!string_param("filename", &imagemap->filename, true)) {
           m_tokenizer.set_error("Required parameter \"filename\" is missing");
           delete imagemap;
           return false;

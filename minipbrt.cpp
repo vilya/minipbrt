@@ -6355,6 +6355,7 @@ namespace minipbrt {
     if (materialOut != nullptr) {
       *materialOut = static_cast<uint32_t>(m_scene->materials.size());
     }
+    m_attrs->top->materials.push_back(static_cast<uint32_t>(m_scene->materials.size()));
     m_scene->materials.push_back(material);
     return true;
   }
@@ -6923,7 +6924,10 @@ namespace minipbrt {
     texture->name = copy_string(string_arg(0));
     texture->dataType = typed_enum_arg<TextureData>(1);
 
-    // TODO: add the texture to the name map for the current AttributeBegin/End block.
+    if (texture->dataType == TextureData::Float)
+        m_attrs->top->floatTextures.push_back(static_cast<uint32_t>(m_scene->textures.size()));
+    else
+        m_attrs->top->spectrumTextures.push_back(static_cast<uint32_t>(m_scene->textures.size()));
     m_scene->textures.push_back(texture);
     return true;
   }
@@ -7988,17 +7992,20 @@ namespace minipbrt {
 
   bool Parser::texture_param(const char* name, TextureData dataType, uint32_t* dest)
   {
-    char* textureName = nullptr;
-    if (!string_param(name, &textureName)) {
-      return false;
-    }
+      assert(name != nullptr);
 
-    uint32_t tex = find_texture(textureName, dataType);
-    if (tex == kInvalidIndex) {
-      return false;
-    }
-    *dest = tex;
-    return true;
+      const ParamInfo *paramDesc = find_param(name, ParamType::Texture);
+      if (paramDesc == nullptr || paramDesc->count != 1) {
+          return false;
+      }
+      char *textureName = reinterpret_cast<char *>(m_temp.data() + paramDesc->offset);
+
+      uint32_t tex = find_texture(textureName, dataType);
+      if (tex == kInvalidIndex) {
+          return false;
+      }
+      *dest = tex;
+      return true;
   }
 
 

@@ -4249,8 +4249,8 @@ namespace minipbrt {
     areaLight          = other->areaLight;
     insideMedium       = other->insideMedium;
     outsideMedium      = other->outsideMedium;
+    object             = other->object;
     reverseOrientation = other->reverseOrientation;
-    instanced          = other->instanced;
   }
 
 
@@ -5972,8 +5972,8 @@ namespace minipbrt {
     shape->areaLight = m_attrs->top->areaLight;
     shape->insideMedium = m_attrs->top->insideMedium;
     shape->outsideMedium = m_attrs->top->outsideMedium;
+    shape->object = m_activeObject;
     shape->reverseOrientation = m_attrs->top->reverseOrientation;
-    shape->instanced = m_activeObject != kInvalidIndex;
 
     // Check whether the shape is overriding any properties of the active material
     if (shape->material != kInvalidIndex) {

@@ -1015,8 +1015,8 @@ namespace minipbrt {
     uint32_t areaLight      = kInvalidIndex;
     uint32_t insideMedium   = kInvalidIndex;
     uint32_t outsideMedium  = kInvalidIndex;
+    uint32_t object         = kInvalidIndex; // The object that this shape is part of, or kInvalidIndex if it's not part of one.
     bool reverseOrientation = false;
-    bool instanced          = false;
 
     virtual ~Shape() {}
     virtual ShapeType type() const = 0;

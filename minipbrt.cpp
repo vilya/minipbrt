@@ -7739,16 +7739,10 @@ namespace minipbrt {
   const ParamInfo* Parser::find_param(const char* name, ParamTypeSet allowedTypes) const
   {
     assert(name != nullptr);
-
     for (const ParamInfo& paramDesc : m_params) {
-      if (std::strcmp(name, paramDesc.name) != 0) {
-        continue;
+      if (std::strcmp(name, paramDesc.name) == 0) {
+        return allowedTypes.contains(paramDesc.type) ? &paramDesc : nullptr;
       }
-      if (!allowedTypes.contains(paramDesc.type)) {
-        // error, invalid type for param
-        return nullptr;
-      }
-      return &paramDesc;
     }
     return nullptr;
   }

@@ -3294,7 +3294,7 @@ namespace minipbrt {
 
     if (filename >= buf && filename < (buf + currentLen)) {
       if (currentLen > 0) {
-        memmove(buf + sizeof(char) * currentLen, filename, sizeof(char) * currentLen);
+        memmove(buf + sizeof(char) * currentLen, filename, sizeof(char) * filenameLen);
         memcpy(buf, current, sizeof(char) * currentLen);
       }
     }

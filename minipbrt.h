@@ -328,7 +328,7 @@ namespace minipbrt {
     float focusdistance     = 10.0f;
     bool simpleweighting    = true;
 
-    virtual ~RealisticCamera() override {}
+    virtual ~RealisticCamera() override { delete[] lensfile; }
     virtual CameraType type() const override { return CameraType::Realistic; }
   };
 
@@ -359,7 +359,7 @@ namespace minipbrt {
     float diagonal            = 35.0f; // in millimetres
     char* filename            = nullptr; // name of the output image.
 
-    virtual ~ImageFilm() override {}
+    virtual ~ImageFilm() override { delete[] filename; }
     virtual FilmType type() const override { return FilmType::Image; }
     virtual float get_aspect_ratio() const override { return float(xresolution) / float(yresolution); }
     virtual void get_resolution(int& w, int& h) const override { w = xresolution; h = yresolution; }
@@ -594,7 +594,7 @@ namespace minipbrt {
     float I[3]    = { 1.0f, 1.0f, 1.0f };
     char* mapname = nullptr;
 
-    virtual ~GoniometricLight() override {}
+    virtual ~GoniometricLight() override { delete[] mapname; }
     virtual LightType type() const override { return LightType::Goniometric; }
   };
 
@@ -604,7 +604,7 @@ namespace minipbrt {
     int samples   = 1;
     char* mapname = nullptr;
 
-    virtual ~InfiniteLight() override {}
+    virtual ~InfiniteLight() override { delete[] mapname; }
     virtual LightType type() const override { return LightType::Infinite; }
   };
 
@@ -623,7 +623,7 @@ namespace minipbrt {
     float fov     = 45.0f;
     char* mapname = nullptr;
 
-    virtual ~ProjectionLight() override {}
+    virtual ~ProjectionLight() override { delete[] mapname; }
     virtual LightType type() const override { return LightType::Projection; }
   };
 
@@ -667,7 +667,7 @@ namespace minipbrt {
     const char* name = nullptr;
     uint32_t bumpmap = kInvalidIndex;
 
-    virtual ~Material() {}
+    virtual ~Material() { delete[] name; }
     virtual MaterialType type() const = 0;
   };
 
@@ -880,7 +880,10 @@ namespace minipbrt {
     float g           = 0.0f;
     float scale       = 1.0f;
 
-    virtual ~Medium() {}
+    virtual ~Medium() {
+      delete[] mediumName;
+      delete[] preset;
+    }
     virtual MediumType type() const = 0;
   };
 
@@ -899,7 +902,7 @@ namespace minipbrt {
     int nz         = 1;
     float* density = nullptr;
 
-    virtual ~HeterogeneousMedium() override {}
+    virtual ~HeterogeneousMedium() override { delete[] density; }
     virtual MediumType type() const override { return MediumType::Heterogeneous; }
   };
 

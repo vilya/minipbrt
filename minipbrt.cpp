@@ -3317,6 +3317,7 @@ namespace minipbrt {
     return (*f != nullptr) ? 0 : errno;
   #endif
   }
+  
 
   static inline int64_t file_pos(FILE* file)
   {
@@ -6145,7 +6146,6 @@ namespace minipbrt {
 
     uint32_t material = kInvalidIndex;
     if (parse_material_common(materialType, string_arg(0), &material)) {
-      m_scene->materials[material]->name = copy_string(string_arg(0));
       return true;
     }
     return false;

@@ -1023,6 +1023,7 @@ namespace minipbrt {
 
     virtual ~Shape() {}
     virtual ShapeType type() const = 0;
+    virtual bool can_convert_to_triangle_mesh() const { return false; }
     virtual TriangleMesh* triangle_mesh() const { return nullptr; }
 
     void copy_common_properties(const Shape* other);
@@ -1088,6 +1089,7 @@ namespace minipbrt {
 
     virtual ~HeightField() override { delete Pz; }
     virtual ShapeType type() const override { return ShapeType::HeightField; }
+    virtual bool can_convert_to_triangle_mesh() const override { return true; }
     virtual TriangleMesh* triangle_mesh() const override;
   };
 
@@ -1114,6 +1116,7 @@ namespace minipbrt {
       delete[] P;
     }
     virtual ShapeType type() const override { return ShapeType::LoopSubdiv; }
+    virtual bool can_convert_to_triangle_mesh() const override { return true; }
     virtual TriangleMesh* triangle_mesh() const override;
   };
 
@@ -1139,6 +1142,7 @@ namespace minipbrt {
       delete[] Pw;
     }
     virtual ShapeType type() const override { return ShapeType::Nurbs; }
+    virtual bool can_convert_to_triangle_mesh() const override { return true; }
     virtual TriangleMesh* triangle_mesh() const override;
   };
 
@@ -1152,6 +1156,7 @@ namespace minipbrt {
       delete[] filename;
     }
     virtual ShapeType type() const override { return ShapeType::PLYMesh; }
+    virtual bool can_convert_to_triangle_mesh() const override { return true; }
     virtual TriangleMesh* triangle_mesh() const override;
   };
 

@@ -4672,19 +4672,18 @@ namespace minipbrt {
       return false;
     }
 
-    FILE* f = nullptr;
-    if (file_open(&f, filename, "rb") != 0) {
-      set_error("Failed to open %s", filename);
-      return false;
-    }
-
     // Create the fileData array and the input buffer. This freezes their configuration settings.
     m_fileData = new FileData[m_maxIncludeDepth + 1];
     m_fileData[0].filename = copy_string(filename);
-    m_fileData[0].f = f;
+    m_fileData[0].f = nullptr;
     m_fileData[0].atEOF = false;
     m_fileData[0].bufOffset = 0;
     m_includeDepth = 0;
+
+    if (file_open(&m_fileData[0].f, filename, "rb") != 0) {
+      set_error("Failed to open %s", filename);
+      return false;
+    }
 
     m_buf = new char[m_bufCapacity + 1];
     m_buf[m_bufCapacity] = '\0';

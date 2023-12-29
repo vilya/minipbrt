@@ -4672,18 +4672,19 @@ namespace minipbrt {
       return false;
     }
 
-    // Create the fileData array and the input buffer. This freezes their configuration settings.
-    m_fileData = new FileData[m_maxIncludeDepth + 1];
-    m_fileData[0].filename = copy_string(filename);
-    m_fileData[0].f = nullptr;
-    m_fileData[0].atEOF = false;
-    m_fileData[0].bufOffset = 0;
-    m_includeDepth = 0;
-
-    if (file_open(&m_fileData[0].f, filename, "rb") != 0) {
+    FILE* f = nullptr;
+    if (file_open(&f, filename, "rb") != 0) {
       set_error("Failed to open %s", filename);
       return false;
     }
+
+    // Create the fileData array and the input buffer. This freezes their configuration settings.
+    m_fileData = new FileData[m_maxIncludeDepth + 1];
+    m_fileData[0].filename = copy_string(filename);
+    m_fileData[0].f = f;
+    m_fileData[0].atEOF = false;
+    m_fileData[0].bufOffset = 0;
+    m_includeDepth = 0;
 
     m_buf = new char[m_bufCapacity + 1];
     m_buf[m_bufCapacity] = '\0';
@@ -5167,19 +5168,23 @@ namespace minipbrt {
       m_error = nullptr;
     }
 
-    FileData* fdata = &m_fileData[m_includeDepth];
-    int64_t errorOffset = fdata->bufOffset + static_cast<int64_t>(m_pos - m_buf);
-
     char* errorMessage = new char[size_t(len + 1)];
     va_start(args, fmt);
     vsnprintf(errorMessage, size_t(len + 1), fmt, args);
     va_end(args);
 
-    m_error = new Error(fdata->filename, errorOffset, errorMessage);
+    if (m_fileData)
+    {
+      FileData* fdata = &m_fileData[m_includeDepth];
+      int64_t errorOffset = fdata->bufOffset + static_cast<int64_t>(m_pos - m_buf);
+      m_error = new Error(fdata->filename, errorOffset, errorMessage);
 
-    int64_t errorLine, errorCol;
-    cursor_location(&errorLine, &errorCol);
-    m_error->set_line_and_column(errorLine, errorCol);
+      int64_t errorLine, errorCol;
+      cursor_location(&errorLine, &errorCol);
+      m_error->set_line_and_column(errorLine, errorCol);
+    }
+    else
+      m_error = new Error("", 0, errorMessage);
   }
 
 

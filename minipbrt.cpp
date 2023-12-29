@@ -5168,19 +5168,23 @@ namespace minipbrt {
       m_error = nullptr;
     }
 
-    FileData* fdata = &m_fileData[m_includeDepth];
-    int64_t errorOffset = fdata->bufOffset + static_cast<int64_t>(m_pos - m_buf);
-
     char* errorMessage = new char[size_t(len + 1)];
     va_start(args, fmt);
     vsnprintf(errorMessage, size_t(len + 1), fmt, args);
     va_end(args);
 
-    m_error = new Error(fdata->filename, errorOffset, errorMessage);
+    if (m_fileData)
+    {
+      FileData* fdata = &m_fileData[m_includeDepth];
+      int64_t errorOffset = fdata->bufOffset + static_cast<int64_t>(m_pos - m_buf);
+      m_error = new Error(fdata->filename, errorOffset, errorMessage);
 
-    int64_t errorLine, errorCol;
-    cursor_location(&errorLine, &errorCol);
-    m_error->set_line_and_column(errorLine, errorCol);
+      int64_t errorLine, errorCol;
+      cursor_location(&errorLine, &errorCol);
+      m_error->set_line_and_column(errorLine, errorCol);
+    }
+    else
+      m_error = new Error("", 0, errorMessage);
   }
 
 

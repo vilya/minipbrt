@@ -294,7 +294,7 @@ namespace minipbrt {
         const ImageFilm* imagefilm = dynamic_cast<const ImageFilm*>(film);
         printf("xresolution        = %d\n", imagefilm->xresolution);
         printf("yresolution        = %d\n", imagefilm->yresolution);
-        printf("cropwindow         = [ %f, %f, %f, %f ]\n", imagefilm->cropwwindow[0], imagefilm->cropwwindow[1], imagefilm->cropwwindow[2], imagefilm->cropwwindow[3]);
+        printf("cropwindow         = [ %f, %f, %f, %f ]\n", imagefilm->cropwindow[0], imagefilm->cropwindow[1], imagefilm->cropwindow[2], imagefilm->cropwindow[3]);
         printf("scale              = %f\n", imagefilm->scale);
         printf("maxsampleluminance = %f\n", imagefilm->maxsampleluminance);
         printf("diagonal           = %f mm\n", imagefilm->diagonal);
